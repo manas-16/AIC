@@ -40,6 +40,7 @@ Four levels of structured intent, each owned by the right role:
 ---
 
 ## Project Structure
+```
 /my-project
 ├── /intent
 │   ├── project.intent
@@ -51,10 +52,11 @@ Four levels of structured intent, each owned by the right role:
 │       ├── UserService.intent
 │       └── UserService.java
 └── /swift
-├── swift.intent
-└── /UserService
-├── UserService.intent
-└── UserService.swift
+    ├── swift.intent
+    └── /UserService
+        ├── UserService.intent
+        └── UserService.swift
+```
 
 ---
 
