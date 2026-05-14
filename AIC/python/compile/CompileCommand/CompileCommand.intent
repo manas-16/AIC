@@ -1,0 +1,120 @@
+id: AIC-COMPILE-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-COMPILE-001
+  language: aic-python-guidelines
+
+component: CompileCommand
+file: python/compile/CompileCommand/compile_command.py
+
+implementation:
+  - id: AIC-COMPILE-001-PY-I1
+    intent: |
+      Entry point is a Click command function named compile_component().
+      Named compile_component not compile to avoid Python builtin conflict.
+      Accepts:
+        component_name: str     ← positional, required
+        --target: str           ← required, format: language or language@version
+        --force: bool           ← optional flag, default False
+        --verify: bool          ← optional flag, default False
+      Parses target into language and optional version strings.
+
+  - id: AIC-COMPILE-001-PY-I2
+    intent: |
+      Target parsing:
+        --target python         → language=python, version=None
+        --target python@3.11    → language=python, version=3.11
+        --target java@21        → language=java, version=21
+      Split on @ character. If no @ version is None.
+      Validate language folder exists in project root.
+
+  - id: AIC-COMPILE-001-PY-I3
+    intent: |
+      Config loading.
+      Read .aic/aic.config.json using json.load.
+      Validate provider, model, and apiKey fields are present and non-empty.
+      Raise ProviderNotConfiguredError if any field is empty.
+      Load API key from environment variable if value starts with ${
+      Example: ${ANTHROPIC_API_KEY} → os.environ.get("ANTHROPIC_API_KEY")
+
+  - id: AIC-COMPILE-001-PY-I4
+    intent: |
+      Phase 1 — Retrieval via IntentParser and InheritanceResolver.
+      IntentParser reads each .intent file using yaml.safe_load.
+      InheritanceResolver builds ordered context list:
+        [project_intent, language_intent, module_intent, component_intent]
+      Each intent loaded as a Python dict.
+      Referenced standards files loaded as raw text.
+      Existing generated code file read as raw text if present.
+      Existing lockfile read via LockfileManager if present.
+
+  - id: AIC-COMPILE-001-PY-I5
+    intent: |
+      Phase 2 — Delta computation via DeltaEngine.
+      Hash current component intent using hashlib.sha256.
+      Compare against hash stored in lockfile.
+      If hashes match — nothing changed, skip compilation, inform developer.
+      If no lockfile — full generation mode.
+      If hashes differ — compute delta:
+        Parse old intent from lockfile snapshot.
+        Parse new intent from current file.
+        Identify changed behavior IDs and implementation IDs.
+        Build delta dict containing only changed sections.
+
+  - id: AIC-COMPILE-001-PY-I6
+    intent: |
+      Phase 3 — Inference via provider adapter.
+      Build prompt using PromptBuilder:
+        Section 1: project standards and rules
+        Section 2: language guidelines and patterns
+        Section 3: business intent behaviors and journeys
+        Section 4: component intent delta (changed sections only)
+        Section 5: existing code file if present
+        Section 6: target language and version instruction
+        Section 7: explicit instruction to update only delta sections
+      Select provider adapter based on config provider field.
+      Call provider.generate(prompt) → returns generated code string.
+      Handle provider errors explicitly — no bare except.
+
+  - id: AIC-COMPILE-001-PY-I7
+    intent: |
+      Phase 4 — Write and lockfile update.
+      Determine output file path from component.intent file field.
+      Write generated code to output path.
+      Compute new intent hash.
+      Create LockfileEntry with:
+        component_name, language, version, intent_hash,
+        provider, model, generated_at timestamp.
+      Write lockfile to .aic/lockfiles/<ComponentName>-<language>.lock
+      Lockfile is JSON format.
+
+  - id: AIC-COMPILE-001-PY-I8
+    intent: |
+      --verify flag behavior.
+      After writing output file, run VerificationEngine.
+      Check each declared behavior ID exists in generated code
+      by searching for behavior description keywords.
+      Print PASSED or WARNING per behavior.
+      Log verification_passed boolean in lockfile.
+      Never fail compilation on verification warning —
+      developer makes final call.
+
+  - id: AIC-COMPILE-001-PY-I9
+    intent: |
+      Progress output using terminal utility.
+      Show spinner or step indicator for each phase.
+      Phase 1: "Reading intent files..."
+      Phase 2: "Computing delta..."
+      Phase 3: "Calling <provider>..."
+      Phase 4: "Writing output..."
+      Final: "Done. <ComponentName> compiled to <language> in <time>s"
+
+error-handling:
+  - NotInitialisedError          → exit code 1
+  - ComponentNotFoundError       → exit code 1
+  - ProviderNotConfiguredError   → exit code 1
+  - IntentParseError             → exit code 1, show file and line
+  - ProviderCallError            → exit code 2, show provider error
+  - OutputWriteError             → exit code 2, show path
+  - LockfileWriteError           → exit code 2, warn but keep output

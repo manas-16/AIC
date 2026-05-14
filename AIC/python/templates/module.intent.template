@@ -1,0 +1,33 @@
+id: {{module_id}}
+type: module
+owner: business
+extends: project.intent
+
+module: {{module_name}}
+description: # TODO: describe what this module does
+
+behaviors:
+  - id: {{module_id}}-B1
+    intent: |
+      # TODO: describe the first behavior of this module
+      # Be specific — vague intent produces inconsistent output
+
+  - id: {{module_id}}-B2
+    intent: |
+      # TODO: describe the second behavior
+      # Add as many behaviors as needed
+
+journeys:
+  - actor: # TODO: who triggers this (Developer, Admin, User)
+    trigger: # TODO: what action they take
+    outcome: # TODO: what happens as a result
+
+  - actor:
+    trigger:
+    outcome:
+
+failure-modes:
+  - scenario: # TODO: describe a failure scenario
+    response: # TODO: how AIC should respond
+
+# Add more failure modes as needed

@@ -1,0 +1,117 @@
+id: AIC-NAV-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic navigate
+command: aic navigate --query "your task description"
+description: >
+  Traverses the project intent structure based on a natural language
+  query and assembles a scoped context package containing exactly
+  the right intent files for that task.
+  No AI involved. No code generated. Pure deterministic traversal.
+  Output is ready to paste into any AI tool.
+
+behaviors:
+  - id: AIC-NAV-001-B1
+    intent: |
+      Parse the query to extract:
+        - Component name if mentioned
+        - Language if mentioned
+        - Action type (fix, create, migrate, explain, audit)
+      If component name is ambiguous list all matching
+      business folders and ask developer to clarify.
+
+  - id: AIC-NAV-001-B2
+    intent: |
+      Always read project.intent first.
+      It is always in scope for every query without exception.
+
+  - id: AIC-NAV-001-B3
+    intent: |
+      Match query to the most relevant subfolder in /business.
+      Read that module.intent and any referenced sub-intents.
+      If no match found list all available business modules
+      and ask developer to clarify.
+
+  - id: AIC-NAV-001-B4
+    intent: |
+      If language is specified in query read that language.intent.
+      If language not specified and only one language exists use it.
+      If multiple languages exist and none specified ask developer.
+
+  - id: AIC-NAV-001-B5
+    intent: |
+      Read all component.intent files under the matched
+      language and business module combination.
+      If multiple components exist under one module
+      include all of them — they share the same business context.
+
+  - id: AIC-NAV-001-B6
+    intent: |
+      Assemble all read intent files into one clean context block.
+      Add a header line describing what the context covers.
+      Add a footer line instructing how to use the context.
+      Output to terminal by default.
+
+  - id: AIC-NAV-001-B7
+    intent: |
+      Support output flags:
+        --copy    copies output to clipboard automatically
+        --file    writes output to .aic/context/{query-slug}.txt
+        --compile pipes directly to aic compile
+
+journeys:
+  - actor: Developer
+    trigger: Runs aic navigate --query "fix account lockout in android"
+    outcome: |
+      Scoped context assembled containing:
+        project.intent
+        /business/UserService/module.intent
+        /android/android.intent
+        /android/UserService/UserService.intent
+      Printed to terminal ready to paste into AI.
+
+  - actor: Developer
+    trigger: Runs aic navigate --query "fix account lockout" with no language
+    outcome: |
+      AIC detects multiple languages in project.
+      Lists available languages and asks developer to specify.
+
+  - actor: Developer
+    trigger: Runs aic navigate --query "something completely unrelated"
+    outcome: |
+      No matching business module found.
+      Lists all available business module folder names.
+      Asks developer to clarify or pick from list.
+
+  - actor: Autonomous AI agent
+    trigger: Reads NAVIGATION.intent from .aic/intent-lib/ directly
+    outcome: |
+      Follows step by step navigation instructions.
+      Self-navigates to correct context without running aic navigate.
+      Used when AIC is not installed in the environment.
+
+output-format: |
+  ─────────────────────────────────────────
+  AIC CONTEXT: fix account lockout in android
+  ─────────────────────────────────────────
+  [project.intent contents]
+  ─────────────────────────────────────────
+  [module.intent contents]
+  ─────────────────────────────────────────
+  [android.intent contents]
+  ─────────────────────────────────────────
+  [UserService.intent contents]
+  ─────────────────────────────────────────
+  Paste this context into your AI before describing your task.
+  ─────────────────────────────────────────
+
+implementation-note: |
+  This command contains zero LLM calls.
+  All phases are fully deterministic.
+  Phase 1: query parsing
+  Phase 2: file traversal
+  Phase 3: context assembly
+  Phase 4: output formatting
+  No AI provider configuration required to run this command.

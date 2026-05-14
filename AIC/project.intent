@@ -1,0 +1,67 @@
+id: aic-project
+type: project
+version: 1.0
+owner: architect
+
+project:
+  name: AIC — AI Compiler
+  description: >
+    A CLI tool that compiles .intent files to any target
+    language using a configured AI provider. Implements
+    the Intent-Oriented Architecture (IOA) methodology.
+
+  capabilities:
+    - Parse and validate .intent files across four levels
+    - Resolve inheritance chain from project to component level
+    - Scaffold new components with pre-linked boilerplate intent files
+    - Compile intent to any target language and version via AI
+    - Delta-based recompilation — surgical updates not full regeneration
+    - Bidirectional sync — code changes reflected back to intent
+    - Lockfile management — track intent versions per component
+    - Status tracking — STALE, DRIFT, VIOLATION per component
+    - Audit — validate code against declared guidelines
+    - AI provider abstraction — Claude, Gemini, Ollama, Copilot
+
+  prerequisites:
+    - python >= 3.10
+    - git >= 2.0
+    - configured AI provider (Claude / Gemini / Ollama)
+
+  commands:
+    - aic init      ← project setup and language detection
+    - aic create    ← component scaffolding with linked boilerplate
+    - aic compile   ← intent to code compilation
+    - aic sync      ← bidirectional code to intent sync
+    - aic status    ← STALE, DRIFT, VIOLATION tracking
+    - aic audit     ← guideline compliance check
+    - aic validate  ← intent file quality check
+    - aic transpile ← full project migration to new language target
+
+architecture:
+  principles:
+    - Single responsibility per module — one module does one thing
+    - No hardcoded values anywhere — all config via aic.config.json
+    - All AI provider interaction goes through the provider adapter layer only
+    - File I/O is always explicit — no implicit reads or writes
+    - Every operation must be reversible or clearly documented as not
+    - Fail loudly — no silent failures, all errors surface with clear messages
+    - Deterministic phases must remain deterministic — no AI in Phase 1, 2, or 4
+    - Git must be present and initialised — AIC will not run outside a git repo
+
+  security:
+    - No API keys in code, logs, or error messages ever
+    - No execution of generated code — AIC generates, never runs
+    - All file writes are scoped to project directory only
+    - No network calls except to configured AI provider endpoint
+
+  quality:
+    - Every function has a single clear purpose
+    - No function longer than 30 lines
+    - No nested conditionals deeper than 3 levels
+    - All errors handled explicitly — no bare except clauses
+    - No dead code committed
+
+  patterns:
+    - Adapter pattern for all AI provider integrations
+    - Strategy pattern for compilation targets
+    - Observer pattern for status tracking

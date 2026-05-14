@@ -1,0 +1,97 @@
+id: AIC-INIT-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic init
+command: aic init
+description: >
+  Initialises a new AIC-compatible project in the current directory.
+  Creates the base folder structure, generates a boilerplate project.intent,
+  creates the business intent folder, and installs a locked read-only
+  copy of the AIC intent library.
+
+behaviors:
+  - id: AIC-INIT-001-B1
+    intent: |
+      Check if git is initialised in the current directory.
+      If not, refuse to proceed and instruct the user to run git init first.
+      AIC will not initialise outside a git repository.
+
+  - id: AIC-INIT-001-B2
+    intent: |
+      Check if AIC has already been initialised in this directory.
+      If project.intent already exists, refuse to overwrite it.
+      Inform the user that AIC is already initialised.
+      Suggest aic status to check current state.
+
+  - id: AIC-INIT-001-B3
+    intent: |
+      Create the /business folder in the project root.
+      This folder will hold all module level business intent files.
+      Create it empty — no subfolders, no files.
+
+  - id: AIC-INIT-001-B4
+    intent: |
+      Generate project.intent in the project root with boilerplate content.
+      Pre-fill the project name from the current directory name.
+      Pre-fill the git remote URL if one exists.
+      Leave all standards, architecture, and security sections
+      as commented placeholders for the developer to fill in.
+
+  - id: AIC-INIT-001-B5
+    intent: |
+      Create a .aic/ hidden folder in the project root.
+      Inside it create:
+        - /intent-lib/ — locked read-only copy of AIC intent library
+        - /lockfiles/  — empty folder where lockfiles will be stored
+        - aic.config.json — AI provider config with placeholder values
+
+  - id: AIC-INIT-001-B6
+    intent: |
+      Copy the AIC intent library into .aic/intent-lib/ as read-only.
+      Files in this folder must not be modifiable by the user.
+      This library serves as the reference implementation of IOA
+      and as a living example for developers new to the methodology.
+
+  - id: AIC-INIT-001-B7
+    intent: |
+      Print a clear success message showing exactly what was created.
+      Show the next steps the developer should take:
+        1. Fill in project.intent with your architectural rules
+        2. Configure your AI provider in .aic/aic.config.json
+        3. Run aic create {ComponentName} --language {language}
+           to scaffold your first component
+
+journeys:
+  - actor: Developer
+    trigger: Runs aic init in a new project directory
+    outcome: >
+      Project structure created. project.intent open and ready to fill.
+      AIC intent library available as reference in .aic/intent-lib/.
+      Clear next steps printed to terminal.
+
+  - actor: Developer
+    trigger: Runs aic init in a directory without git
+    outcome: >
+      Command refused. Clear error message explaining git is required.
+      Instruction to run git init first then retry.
+
+  - actor: Developer
+    trigger: Runs aic init in a directory where AIC already exists
+    outcome: >
+      Command refused. Existing project.intent preserved untouched.
+      Message suggests aic status to check current project state.
+
+failure-modes:
+  - scenario: No git repository detected
+    response: Exit with clear error. Do not create any files.
+
+  - scenario: project.intent already exists
+    response: Exit with clear error. Do not overwrite anything.
+
+  - scenario: Write permission denied on directory
+    response: Exit with clear error naming the specific path that failed.
+
+  - scenario: AIC intent library missing from installation
+    response: Exit with clear error suggesting reinstall via pip.

@@ -1,0 +1,108 @@
+id: AIC-INIT-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-INIT-001
+  language: aic-python-guidelines
+
+component: InitCommand
+file: aic/commands/init_command.py
+
+implementation:
+  - id: AIC-INIT-001-PY-I1
+    intent: |
+      Entry point is a Typer command function named init().
+      Decorated with @app.command().
+      Accepts no arguments — all context derived from current directory.
+      Uses Rich console for all terminal output.
+
+  - id: AIC-INIT-001-PY-I2
+    intent: |
+      Git check is performed first before any file operations.
+      Use subprocess to run git rev-parse --git-dir.
+      If return code is non-zero, raise GitNotInitialisedError.
+      Print clear Rich error panel and exit with code 1.
+
+  - id: AIC-INIT-001-PY-I3
+    intent: |
+      Check for existing initialisation by looking for project.intent
+      in current directory using pathlib.Path.
+      If found raise AlreadyInitialisedError.
+      Print clear Rich error panel and exit with code 1.
+
+  - id: AIC-INIT-001-PY-I4
+    intent: |
+      Derive project name from Path.cwd().name.
+      Derive git remote URL by running git remote get-url origin.
+      If no remote exists default to empty string — not an error.
+
+  - id: AIC-INIT-001-PY-I5
+    intent: |
+      Create folder structure in this exact order:
+        1. /business
+        2. /.aic
+        3. /.aic/intent-lib
+        4. /.aic/standards
+        5. /.aic/lockfiles
+        6. /.aic/logs
+      Use pathlib.Path.mkdir(parents=True, exist_ok=False).
+      If any folder creation fails raise FolderCreationError
+      with the specific path that failed.
+
+  - id: AIC-INIT-001-PY-I6
+    intent: |
+      Generate project.intent from boilerplate template.
+      Template lives at aic/templates/project.intent.template.
+      Replace placeholders:
+        {{project_name}} → derived project name
+        {{git_remote}}   → derived git remote URL
+        {{date}}         → today's date ISO format
+      Write to project root as project.intent.
+
+  - id: AIC-INIT-001-PY-I7
+    intent: |
+      Copy AIC intent library from aic/intent-lib/ installation path
+      into .aic/intent-lib/ in the project.
+      Set all copied files to read-only using os.chmod 444.
+      If source library missing raise IntentLibraryMissingError
+      and suggest reinstall via pip.
+
+  - id: AIC-INIT-001-PY-I8
+    intent: |
+      Copy standards configs from aic/standards/ installation path
+      into .aic/standards/ in the project.
+      Set all copied files to read-only using os.chmod 444.
+
+  - id: AIC-INIT-001-PY-I9
+    intent: |
+      Generate .aic/aic.config.json from template.
+      Template lives at aic/templates/aic.config.template.json.
+      Pre-fill with placeholder values — provider, model, apiKey fields.
+      Leave all values as empty strings with inline comments
+      instructing developer what to fill in.
+
+  - id: AIC-INIT-001-PY-I10
+    intent: |
+      Print success output using Rich Panel and Rich Tree.
+      Tree shows exactly what was created — every file and folder.
+      Below tree print next steps as a numbered Rich list:
+        1. Fill in project.intent with your architectural rules
+        2. Configure AI provider in .aic/aic.config.json
+        3. Run aic create {ComponentName} --language {language}
+
+platform-specific:
+  - Windows paths use pathlib throughout — no hardcoded separators
+  - chmod 444 on Windows uses icacls as fallback via subprocess
+  - Terminal color output degrades gracefully if no color support detected
+
+error-handling:
+  - GitNotInitialisedError     → exit code 1, suggest git init
+  - AlreadyInitialisedError    → exit code 1, suggest aic status
+  - FolderCreationError        → exit code 2, show failed path
+  - IntentLibraryMissingError  → exit code 2, suggest pip reinstall
+  - PermissionError            → exit code 2, show failed path
+
+manual:
+  - function: _detect_os_permissions
+    reason: OS specific permission handling varies enough to need human precision
+    do-not-modify: true

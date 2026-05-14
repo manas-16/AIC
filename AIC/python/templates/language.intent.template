@@ -1,0 +1,53 @@
+id: {{language_id}}-guidelines
+type: language
+owner: lead-engineer
+extends: project.intent
+
+language: {{language_name}}
+version: {{language_version}}
+
+patterns:
+  # TODO: define architectural patterns enforced in this language
+  # - MVVM architecture enforced across all components
+  # - Repository pattern for all data access
+  # - Dependency injection via X framework
+
+practices:
+  # TODO: define coding practices for this language
+  # - Type hints mandatory on every function signature
+  # - No function longer than 30 lines
+  # - All file paths use pathlib.Path
+
+security:
+  # TODO: define security practices specific to this language/platform
+  # - API keys loaded from environment only
+  # - No eval or exec ever
+  # - All file writes validated against project root
+
+testing:
+  # TODO: define testing standards for this language
+  # - pytest for all tests
+  # - Every public function has at least one test
+  # - Mocks for all external calls in tests
+
+standards:
+  # TODO: reference your standards files
+  # pmd: ./standards/pmd-rules.xml
+  # checkstyle: ./standards/checkstyle.xml
+  # linting: ./standards/pylint.cfg
+  # formatting: ./standards/black.toml
+
+dependencies:
+  required:
+    # TODO: list required dependencies
+    # - framework_name  ← purpose
+
+  optional:
+    # TODO: list optional dependencies
+    # - optional_lib    ← when to use it
+
+error-handling:
+  # TODO: define error handling conventions for this language
+  # - All errors are explicit custom exceptions
+  # - No bare except clauses
+  # - Exit codes: 0 success, 1 user error, 2 system error

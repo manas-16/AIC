@@ -1,0 +1,152 @@
+id: AIC-COMPILE-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic compile
+command: aic compile <ComponentName> --target <language@version>
+description: >
+  Compiles a component.intent file to a target language and version
+  using the configured AI provider. Uses delta-based compilation —
+  reads existing generated file and updates only what changed.
+  Never fully regenerates unless --force flag is passed.
+  Writes a lockfile on completion.
+
+behaviors:
+  - id: AIC-COMPILE-001-B1
+    intent: |
+      Validate the project is initialised and git is present.
+      Validate component name exists in the target language folder.
+      Validate target language and optional version are supported.
+      Validate AI provider is configured in aic.config.json.
+      Fail loudly on any validation failure before touching any file.
+
+  - id: AIC-COMPILE-001-B2
+    intent: |
+      Phase 1 — Retrieval (fully deterministic, zero LLM).
+      Read component.intent for the specified component and language.
+      Resolve full inheritance chain in order:
+        1. project.intent
+        2. language.intent for target language
+        3. business/<ComponentName>/module.intent
+        4. <language>/<ComponentName>/ComponentName.intent
+      Load all referenced standards files declared in project.intent.
+      Read existing generated code file if it exists.
+      Read lockfile if it exists.
+      All steps are pure file I/O — no AI involved.
+
+  - id: AIC-COMPILE-001-B3
+    intent: |
+      Phase 2 — Diff (fully deterministic, zero LLM).
+      Compare current intent hash against lockfile snapshot.
+      Identify exactly which sections of intent changed.
+      If no lockfile exists treat entire intent as new — full generation.
+      If lockfile exists produce a precise delta:
+        - Which behavior IDs changed
+        - Which implementation details changed
+        - Which overrides changed
+      Pass only the delta to Phase 3 — not the full intent.
+
+  - id: AIC-COMPILE-001-B4
+    intent: |
+      Phase 3 — Inference (LLM).
+      Build a structured prompt containing:
+        - Full project standards context
+        - Language guidelines context
+        - Business intent context
+        - Component intent delta only
+        - Existing generated code if present
+        - Target language and version
+      Send to configured AI provider.
+      Receive generated or updated code back.
+      This is the only phase where AI is involved.
+
+  - id: AIC-COMPILE-001-B5
+    intent: |
+      Phase 4 — Validation and write (deterministic).
+      Write generated code to the output file.
+      Compute new intent hash.
+      Write updated lockfile recording:
+        - intent hash
+        - provider and model used
+        - target language and version
+        - timestamp
+      Never write the lockfile if code generation failed.
+
+  - id: AIC-COMPILE-001-B6
+    intent: |
+      Support --force flag to bypass delta and fully regenerate.
+      Useful when generated file is corrupted or needs clean slate.
+      --force deletes existing lockfile before compiling.
+      Warn developer that full regeneration is happening.
+
+  - id: AIC-COMPILE-001-B7
+    intent: |
+      Support --verify flag to run static validation after generation.
+      Check generated output declares all behaviors from intent.
+      Log verification result in lockfile.
+      Warn but do not fail if verification finds gaps —
+      developer makes final call.
+
+  - id: AIC-COMPILE-001-B8
+    intent: |
+      Print clear progress output for each phase.
+      Phase 1: show which files were read
+      Phase 2: show what changed in delta
+      Phase 3: show which provider was called
+      Phase 4: show what was written
+      Total time taken printed at end.
+
+journeys:
+  - actor: Developer
+    trigger: Runs aic compile UserService --target python
+    outcome: |
+      Inheritance chain resolved.
+      Delta computed against lockfile.
+      AI updates only changed sections.
+      user_service.py updated surgically.
+      Lockfile updated.
+      Git diff is clean and minimal.
+
+  - actor: Developer
+    trigger: Runs aic compile UserService --target python
+      for the first time — no lockfile exists
+    outcome: |
+      Full generation from intent.
+      user_service.py created fresh.
+      Lockfile created with initial snapshot.
+
+  - actor: Developer
+    trigger: Runs aic compile UserService --target python --force
+    outcome: |
+      Warning printed — full regeneration happening.
+      Existing lockfile deleted.
+      Full generation from intent.
+      New lockfile created.
+
+  - actor: Developer
+    trigger: Runs aic compile UserService --target java@21
+    outcome: |
+      Same intent file compiled to Java 21.
+      Version passed as context to AI.
+      Java 21 idiomatic code generated.
+      Separate lockfile for java@21 target.
+
+failure-modes:
+  - scenario: AIC not initialised
+    response: Exit code 1 — suggest aic init
+
+  - scenario: Component not found
+    response: Exit code 1 — suggest aic create
+
+  - scenario: AI provider not configured
+    response: Exit code 1 — suggest filling aic.config.json
+
+  - scenario: AI provider call fails
+    response: Exit code 2 — show provider error, no files written
+
+  - scenario: Output file write fails
+    response: Exit code 2 — show path, lockfile not written
+
+  - scenario: Intent file malformed
+    response: Exit code 1 — show which file and what is wrong

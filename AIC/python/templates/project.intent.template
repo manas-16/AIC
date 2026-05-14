@@ -1,0 +1,42 @@
+id: {{project_name}}-project
+type: project
+version: 1.0
+owner: architect
+created: {{date}}
+
+project:
+  name: {{project_name}}
+  git_remote: {{git_remote}}
+  description: # TODO: describe your project here
+
+  prerequisites:
+    - git >= 2.0
+    - configured AI provider (see .aic/aic.config.json)
+
+# Reference your existing standards files here
+# AIC will load these as context for every compilation
+standards:
+  # pmd: ./pmd-rules.xml
+  # checkstyle: ./checkstyle.xml
+  # sonar: ./sonar-project.properties
+  # schema: ./schema/your-schema.json
+
+# Define architectural rules that hold everywhere
+# Language independent — applies to all platforms
+architecture:
+  principles:
+    # - No direct database calls from UI layer
+    # - All services must be stateless
+    # - Event driven communication between services
+
+# Define security mandates that hold everywhere
+security:
+  # - No PII stored unencrypted at rest
+  # - All external calls must use HTTPS
+  # - Authentication required on all non-public endpoints
+
+# Define quality standards
+quality:
+  # - No function longer than 30 lines
+  # - No nested conditionals deeper than 3 levels
+  # - All errors handled explicitly

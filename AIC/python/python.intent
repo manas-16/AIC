@@ -1,0 +1,66 @@
+id: aic-python-guidelines
+type: language
+owner: lead-engineer
+extends: project.intent
+
+language: python
+version: ">=3.10"
+
+patterns:
+  - CLI framework is Typer — no argparse, no Click, no custom argument parsing
+  - YAML parsing via PyYAML — no custom parsers
+  - Rich library for all terminal output — no raw print statements for UI
+  - All AI provider calls go through /providers/ adapter layer only
+  - No direct API calls outside the adapter layer ever
+
+structure:
+  - /aic
+      - /commands      ← one file per CLI command
+      - /providers     ← one file per AI provider adapter
+      - /core          ← shared logic, file parsing, inheritance resolution
+      - /models        ← data models and schemas
+      - /utils         ← stateless utility functions only
+  - /business          ← business intent files
+  - /tests             ← mirrors /aic structure exactly
+
+practices:
+  - Type hints mandatory on every function signature
+  - Docstring mandatory on every public function
+  - No function longer than 30 lines — split if needed
+  - No nested conditionals deeper than 3 levels — extract to function
+  - All file paths use pathlib.Path — no raw string paths ever
+  - All YAML loaded via safe_load — never full load
+  - Environment variables loaded via python-dotenv — no os.environ direct access
+  - All errors are explicit custom exceptions — no bare except clauses
+  - No mutable default arguments ever
+
+security:
+  - API keys loaded from environment only — never hardcoded
+  - API keys never logged, never in error messages, never in tracebacks
+  - All file writes validated against project root — no path traversal
+  - No eval, no exec, no subprocess with shell=True ever
+
+testing:
+  - pytest for all tests
+  - Every public function has at least one test
+  - Every failure mode has a dedicated test
+  - Mocks for all AI provider calls — no real API calls in tests
+  - Test file mirrors source file name — test_init_command.py for init_command.py
+
+dependencies:
+  required:
+    - typer          ← CLI framework
+    - pyyaml         ← YAML parsing
+    - rich           ← terminal output
+    - python-dotenv  ← environment variable loading
+    - httpx          ← HTTP client for provider calls
+  optional:
+    - anthropic      ← Claude provider
+    - google-generativeai ← Gemini provider
+    - ollama         ← local model support
+
+error-handling:
+  - Every command catches exceptions at the top level
+  - User facing errors printed via Rich in red with clear message
+  - Technical errors logged to .aic/logs/ never to terminal
+  - Exit codes are explicit — 0 success, 1 user error, 2 system error

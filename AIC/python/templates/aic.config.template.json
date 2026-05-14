@@ -1,0 +1,25 @@
+{
+  "ai": {
+    "provider": "",
+    "model": "",
+    "apiKey": ""
+  },
+  "_providers": {
+    "_note": "Uncomment and fill in your preferred provider below",
+    "_claude": {
+      "provider": "claude",
+      "model": "claude-sonnet-4-5",
+      "apiKey": "${ANTHROPIC_API_KEY}"
+    },
+    "_gemini": {
+      "provider": "gemini",
+      "model": "gemini-2.0-flash",
+      "apiKey": "${GOOGLE_API_KEY}"
+    },
+    "_ollama": {
+      "provider": "ollama",
+      "model": "llama3",
+      "endpoint": "http://localhost:11434"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+id: {{component_id}}
+type: component
+owner: developer
+extends:
+  business: {{module_id}}
+  language: {{language_id}}
+
+component: {{component_name}}
+file: {{file_path}}
+
+implementation:
+  - id: {{component_id}}-I1
+    intent: |
+      # TODO: describe how this component is implemented
+      # Be specific about patterns, libraries, and approach
+
+  - id: {{component_id}}-I2
+    intent: |
+      # TODO: describe the second implementation detail
+      # Add as many as needed
+
+platform-specific:
+  # TODO: add any platform or language specific nuances
+  # - Handle X differently because of Y platform constraint
+  # - Use Z library for this specific platform
+
+overrides:
+  # TODO: override any inherited business behaviors if needed
+  # - {{module_id}}-B1: |
+  #     Platform specific override description here
+
+error-handling:
+  # TODO: map business failure modes to implementation responses
+  # - {{component_id}}Error → exit code 1, clear message
+
+# Uncomment below for performance critical functions
+# manual:
+#   - function: function_name
+#     reason: why this needs human implementation
+#     do-not-modify: true

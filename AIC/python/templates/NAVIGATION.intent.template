@@ -1,0 +1,71 @@
+id: navigation
+type: navigation
+description: >
+  This file is the entry point for any AI navigating this repository.
+  Read this file first. Follow the steps in order.
+  Do not read files outside the path specified for your task.
+
+steps:
+  - step: 1
+    action: Read project.intent in project root
+    purpose: >
+      Understand org-wide rules, standards, and non-negotiables.
+      These apply to every file in every language without exception.
+      Note which languages this project uses.
+
+  - step: 2
+    action: Read /business folder — list all subfolders
+    purpose: >
+      Each subfolder represents one business module or feature.
+      Folder name is self-explanatory.
+      Do not read inside any subfolder yet.
+
+  - step: 3
+    action: Navigate to the subfolder relevant to your current task only
+    purpose: >
+      Read module.intent inside that subfolder.
+      This describes business behavior, user journeys, and rules.
+      If module.intent references sub-intents read those next.
+      Do not read other module folders — they are not relevant.
+
+  - step: 4
+    action: Navigate to the language folder for your target language
+    purpose: >
+      Read language.intent in the root of that language folder.
+      This describes coding patterns and conventions for all
+      components in this language.
+
+  - step: 5
+    action: Navigate to the component folder matching your task
+    purpose: >
+      Read component.intent inside that folder.
+      This is the most specific context for your task.
+      Overrides declared here take precedence over inherited rules.
+      Read only this component.intent — not sibling components.
+
+  - step: 6
+    action: Read existing generated code file if present
+    purpose: >
+      If a generated file exists read it before making changes.
+      Apply only the delta — do not regenerate what has not changed.
+
+  - step: 7
+    action: Execute your task with full scoped context
+    purpose: >
+      You now have exactly the right context for your task.
+      Apply project rules, language patterns, business intent,
+      and component specifics in that order of precedence.
+      Component overrides win. Project rules cannot be overridden.
+
+navigation-rules:
+  - Read only what is relevant to your current task
+  - Never read sibling component folders
+  - Never skip project.intent — its rules are always in scope
+  - Never skip language.intent — its patterns are always in scope
+  - If unsure which module is relevant read business folder names only
+    then ask for clarification rather than guessing
+
+scope-boundaries:
+  - Your context is: project.intent + language.intent + one module.intent + one component.intent
+  - Everything outside this scope is irrelevant to your current task
+  - Staying within scope prevents hallucination and context pollution

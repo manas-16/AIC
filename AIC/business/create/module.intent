@@ -1,0 +1,150 @@
+id: AIC-CREATE-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic create
+command: aic create <ComponentName> --language <language>
+description: >
+  Scaffolds a new component folder with a pre-linked boilerplate
+  component.intent file and an empty code stub file.
+  One component per command. One language per command.
+  Links to existing module.intent if present.
+  Creates module.intent if not present.
+
+behaviors:
+  - id: AIC-CREATE-001-B1
+    intent: |
+      Check if AIC is initialised in the current directory.
+      project.intent must exist before aic create can run.
+      If not found refuse with clear message suggesting aic init.
+
+  - id: AIC-CREATE-001-B2
+    intent: |
+      Check if git is initialised in the current directory.
+      Refuse if not inside a git repository.
+      Same requirement as aic init.
+
+  - id: AIC-CREATE-001-B3
+    intent: |
+      Validate the component name provided by the developer.
+      Must be PascalCase — UserService, PaymentService, AuthService.
+      Reject names with spaces, special characters, or lowercase start.
+      Print clear error if validation fails.
+
+  - id: AIC-CREATE-001-B4
+    intent: |
+      Validate the language provided via --language flag.
+      Must match an existing language folder in the project.
+      If language folder does not exist offer to create it
+      with a skeleton language.intent file.
+
+  - id: AIC-CREATE-001-B5
+    intent: |
+      Check if /business/<ComponentName>/module.intent exists.
+      If YES — read its ID and use it for linking. Do not recreate.
+      If NO  — create /business/<ComponentName>/ folder
+               and generate module.intent from template.
+               Auto-generate a unique ID in format: 
+               <PROJECT_PREFIX>-<COMPONENT_ABBREVIATION>-001
+
+  - id: AIC-CREATE-001-B6
+    intent: |
+      Create the component folder at:
+      /<language>/<ComponentName>/
+      If folder already exists refuse and inform developer.
+      Do not overwrite existing components.
+
+  - id: AIC-CREATE-001-B7
+    intent: |
+      Generate component.intent from template inside the component folder.
+      Pre-fill:
+        - component_id  from auto-generated ID
+        - module_id     from existing or newly created module.intent
+        - language_id   from language.intent in language folder
+        - component_name from command argument
+        - file_path     relative path to the code stub file
+      All TODOs left for developer to fill in.
+
+  - id: AIC-CREATE-001-B8
+    intent: |
+      Generate empty code stub file inside the component folder.
+      File name follows language convention:
+        python    → component_name.py (snake_case)
+        java      → ComponentName.java (PascalCase)
+        swift     → ComponentName.swift (PascalCase)
+        kotlin    → ComponentName.kt (PascalCase)
+        typescript → componentName.ts (camelCase)
+      File contains only a minimal class or module stub.
+      No business logic. No implementation. Just structure.
+
+  - id: AIC-CREATE-001-B9
+    intent: |
+      Print success message showing exactly what was created.
+      Show the component folder structure as a tree.
+      Print next steps — fill in component.intent then run aic compile.
+
+journeys:
+  - actor: Developer
+    trigger: Runs aic create UserService --language python
+    outcome: |
+      /business/UserService/module.intent created with boilerplate
+      /python/UserService/UserService.intent created pre-linked to module
+      /python/UserService/user_service.py created as empty stub
+      Success message with tree and next steps printed.
+
+  - actor: Developer
+    trigger: Runs aic create UserRepository --language python
+      (UserService module.intent already exists)
+    outcome: |
+      Existing /business/UserService/module.intent detected
+      ID read from existing file — no new module.intent created
+      /python/UserRepository/UserRepository.intent created
+        pre-linked to existing module ID
+      /python/UserRepository/user_repository.py created
+      Success message printed.
+
+  - actor: Developer
+    trigger: Runs aic create UserService --language python
+      (component already exists)
+    outcome: |
+      Command refused. Existing component preserved untouched.
+      Clear message telling developer component already exists.
+
+  - actor: Developer
+    trigger: Runs aic create userservice --language python
+      (lowercase name)
+    outcome: |
+      Command refused. Validation error explaining PascalCase requirement.
+      Example of correct usage shown.
+
+  - actor: Developer
+    trigger: Runs aic create UserService --language flutter
+      (flutter folder does not exist yet)
+    outcome: |
+      AIC detects flutter language folder does not exist.
+      Offers to create /flutter/ with skeleton flutter.intent.
+      Developer confirms — folder and intent created.
+      Component scaffolded inside new flutter folder.
+
+failure-modes:
+  - scenario: AIC not initialised
+    response: Exit code 1 — suggest aic init
+
+  - scenario: Git not initialised
+    response: Exit code 1 — suggest git init
+
+  - scenario: Invalid component name
+    response: Exit code 1 — show naming rules and example
+
+  - scenario: Language folder missing
+    response: Exit code 1 — offer to create with skeleton intent
+
+  - scenario: Component already exists
+    response: Exit code 1 — preserve existing, suggest aic status
+
+  - scenario: Write permission denied
+    response: Exit code 2 — show exact path that failed
+
+  - scenario: module.intent template missing
+    response: Exit code 2 — suggest pip reinstall
