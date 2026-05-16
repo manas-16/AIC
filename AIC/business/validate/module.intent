@@ -1,0 +1,58 @@
+id: AIC-VALIDATE-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic validate
+command: aic validate <intent-file-path>
+description: >
+  Validates a user-provided .intent file against AIC intent quality standards.
+  Compares the file structure and intent language against project, language,
+  and command-level guidelines. Generates AI feedback without modifying files.
+
+behaviors:
+  - id: AIC-VALIDATE-001-B1
+    intent: |
+      Validate that the supplied file exists and has a .intent extension.
+      Reject missing files and invalid paths before contacting the AI.
+
+  - id: AIC-VALIDATE-001-B2
+    intent: |
+      Parse the intent file as YAML.
+      If the file is malformed, report parse errors clearly and stop.
+
+  - id: AIC-VALIDATE-001-B3
+    intent: |
+      Load project.intent if present, and language.intent if the file is within
+      a language folder. Use these standards as context for validation.
+
+  - id: AIC-VALIDATE-001-B4
+    intent: |
+      Call the configured AI provider once with:
+        1) the user intent file content
+        2) standard AIC validation guidelines
+        3) project/language context when available
+      Ask the AI to identify missing sections, unclear wording, structural
+      issues, and suggested improvements.
+
+  - id: AIC-VALIDATE-001-B5
+    intent: |
+      Print the AI feedback clearly to the terminal.
+      Do not modify the user's intent file automatically.
+
+journeys:
+  - actor: Developer
+    trigger: Runs aic validate with a new or edited .intent file
+    outcome: |
+      The command returns actionable feedback on validation issues,
+      helping the developer improve intent clarity and readiness for AIC.
+
+failure-modes:
+  - scenario: Intent file missing
+    response: Exit with clear message and example usage.
+
+  - scenario: Invalid YAML content
+    response: Exit with parse error and avoid any AI provider call.
+
+  - scenario: AI provider not configured
+    response: Exit with instructions to populate .aic/aic.config.json.

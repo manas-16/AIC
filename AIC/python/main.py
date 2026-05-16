@@ -6,6 +6,7 @@ Commands:
   aic init      ← initialise AIC in current directory
   aic create    ← scaffold a new component
   aic compile   ← compile intent to code via AI
+  aic validate  ← validate a .intent file against AIC guidelines
   aic status    ← check sync state of all components
   aic navigate  ← assemble scoped context for AI chat
 """
@@ -27,6 +28,7 @@ from create.CreateCommand.create_command import run_create
 from compile.CompileCommand.compile_command import run_compile
 from status.StatusCommand.status_command import run_status
 from navigate.NavigateCommand.navigate_command import run_navigate
+from validate.ValidateCommand.validate_command import run_validate
 
 
 @click.group()
@@ -140,6 +142,19 @@ def status(component: str, language: str, expand: bool):
       aic status --expand
     """
     run_status(component, language, expand)
+
+
+@cli.command()
+@click.argument("intent_file")
+def validate(intent_file: str):
+    """
+    Validate a .intent file against AIC intent and project guidelines.
+
+    Examples:
+      aic validate business/UserService/module.intent
+      aic validate python/UserService/UserService.intent
+    """
+    run_validate(intent_file)
 
 
 @cli.command()

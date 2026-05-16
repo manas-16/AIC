@@ -1,0 +1,64 @@
+id: AIC-VALIDATE-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-VALIDATE-001
+  language: aic-python-guidelines
+
+component: ValidateCommand
+file: python/validate/ValidateCommand/validate_command.py
+
+implementation:
+  - id: AIC-VALIDATE-001-PY-I1
+    intent: |
+      Expose run_validate(intent_file_path: str) as the command entry point.
+      Accept one positional argument that points to a .intent file.
+
+  - id: AIC-VALIDATE-001-PY-I2
+    intent: |
+      Determine the current project root from the current working directory.
+      Resolve relative paths against the project root.
+      Accept absolute paths as-is.
+
+  - id: AIC-VALIDATE-001-PY-I3
+    intent: |
+      Validate the intent file path, ensure it exists, and that it ends with
+      .intent. Reject invalid input before loading any files.
+
+  - id: AIC-VALIDATE-001-PY-I4
+    intent: |
+      Parse the requested intent file using the intent parser.
+      If parsing fails, print the YAML error and exit without calling the AI.
+
+  - id: AIC-VALIDATE-001-PY-I5
+    intent: |
+      Load the command's own validation guidelines from:
+        AIC/business/validate/module.intent
+        AIC/python/validate/ValidateCommand/ValidateCommand.intent
+      Also load project.intent and language.intent if they exist in the target
+      project.
+
+  - id: AIC-VALIDATE-001-PY-I6
+    intent: |
+      Build a prompt that includes:
+        - the user's intent file content
+        - the applicable standard guidelines
+        - available project and language intent context
+        - clear instructions to return validation findings only
+
+  - id: AIC-VALIDATE-001-PY-I7
+    intent: |
+      Call the configured AI provider once with the validation prompt.
+      Print the provider response directly to the terminal.
+      If the response indicates no issues, print a success message.
+
+  - id: AIC-VALIDATE-001-PY-I8
+    intent: |
+      Do not write any files as part of the validation command.
+      Intent changes remain the developer's responsibility.
+
+error-handling:
+  - IntentFileError
+  - IntentParseError
+  - ProviderNotConfiguredError
+  - ProviderCallError
