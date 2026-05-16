@@ -48,7 +48,7 @@ from utils.terminal import (
 
 # Path to AIC's own installation directory
 # Templates and intent library live here
-AIC_PACKAGE_DIR = Path(__file__).parent.parent
+AIC_PACKAGE_DIR = Path(__file__).parent.parent.parent
 
 
 def _get_template(template_name: str) -> str:

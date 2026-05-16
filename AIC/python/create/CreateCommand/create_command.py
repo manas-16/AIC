@@ -1,9 +1,12 @@
 """
-AIC Create Command
-Implements: aic create <ComponentName> --language <language>
+AIC Create Command v2
+Implements: aic create <ComponentName> --language <language> [--path <path>]
 
-Scaffolds a new component folder with a pre-linked boilerplate
-component.intent file and an empty code stub file.
+Two modes:
+  No --path  → creates subfolder + .intent + code stub (original behavior)
+  With --path → goes to exact path relative to project root
+                if matching code file exists → .intent only, links to it
+                if no code file exists      → .intent only, no stub
 
 Inheritance chain:
   project.intent
@@ -11,19 +14,12 @@ Inheritance chain:
       ↓ business/create/module.intent
       ↓ python/create/CreateCommand/CreateCommand.intent
       ↓ this file
-
-Phases (all deterministic — zero LLM):
-  1. Validation          — git, init, name, language checks
-  2. Module resolution   — find or create module.intent
-  3. Language resolution — read language.intent for ID
-  4. Folder creation     — create component folder
-  5. File generation     — component.intent and code stub
-  6. Output              — success message and next steps
 """
 
 import re
 import yaml
 from pathlib import Path
+from typing import Optional
 from datetime import date
 
 import click
@@ -46,20 +42,18 @@ from utils.terminal import (
     print_warning,
 )
 
-# ── Custom exceptions for aic create ─────────────────────────────────────────
+# ── Custom exceptions ─────────────────────────────────────────────────────────
 
 class NotInitialisedError(AICError):
     exit_code = 1
     message = (
         "AIC is not initialised in this directory.\n"
-        "Run: aic init\n"
-        "Then retry: aic create"
+        "Run: aic init"
     )
 
 
 class InvalidComponentNameError(AICError):
     exit_code = 1
-
     def __init__(self, name: str):
         self.message = (
             f"Invalid component name: '{name}'\n"
@@ -72,32 +66,35 @@ class InvalidComponentNameError(AICError):
 
 class LanguageFolderMissingError(AICError):
     exit_code = 1
-
     def __init__(self, language: str):
-        self.language = language
         self.message = (
             f"Language folder not found: /{language}\n"
-            f"Create it first with a {language}.intent file\n"
-            f"or run: aic init --language {language}"
+            f"Create it first with a {language}.intent file."
         )
         super().__init__(self.message)
 
 
 class ComponentAlreadyExistsError(AICError):
     exit_code = 1
-
-    def __init__(self, component_name: str, language: str):
+    def __init__(self, path: str):
         self.message = (
-            f"Component already exists: /{language}/{component_name}\n"
-            "AIC will not overwrite existing components.\n"
+            f"Component intent already exists: {path}\n"
+            "AIC will not overwrite existing intent files.\n"
             "Run: aic status to check current component state."
         )
         super().__init__(self.message)
 
 
+class InvalidPathError(AICError):
+    exit_code = 1
+    def __init__(self, path: str, reason: str):
+        self.message = f"Invalid path '{path}': {reason}"
+        super().__init__(self.message)
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-AIC_PACKAGE_DIR = Path(__file__).parent.parent
+AIC_PACKAGE_DIR = Path(__file__).parent.parent.parent
 
 
 def _get_template(template_name: str) -> str:
@@ -117,32 +114,27 @@ def _render_template(template: str, context: dict) -> str:
 
 
 def _to_snake_case(name: str) -> str:
-    """
-    Convert PascalCase component name to snake_case file name.
-    UserService     → user_service.py
-    UserRepository  → user_repository.py
-    """
-    result = re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
-    return result
+    """Convert PascalCase to snake_case."""
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
 
 
 def _generate_component_id(component_name: str, project_root: Path) -> str:
     """
-    Generate a unique component ID from component name.
-    Format: first 3 letters uppercase + 3 digit counter
+    Generate unique component ID.
+    Format: first 3 letters uppercase + 3 digit counter.
     UserService → USR-001
-    Increments counter if ID already exists in business folder.
     """
     prefix = component_name[:3].upper()
     business_dir = project_root / "business"
     counter = 1
 
-    # Check existing IDs to avoid collision
     if business_dir.exists():
         existing_ids = []
         for intent_file in business_dir.rglob("module.intent"):
             try:
-                content = yaml.safe_load(intent_file.read_text(encoding="utf-8"))
+                content = yaml.safe_load(
+                    intent_file.read_text(encoding="utf-8")
+                )
                 if content and "id" in content:
                     existing_ids.append(content["id"])
             except Exception:
@@ -154,19 +146,19 @@ def _generate_component_id(component_name: str, project_root: Path) -> str:
     return f"{prefix}-{counter:03d}"
 
 
-def _generate_python_stub(component_name: str, module_id: str, file_path: str) -> str:
-    """
-    Generate a minimal Python class stub for the component.
-    No business logic. No implementation. Just structure.
-    """
+def _generate_python_stub(
+    component_name: str,
+    module_id: str,
+    file_path: str
+) -> str:
+    """Generate minimal Python class stub."""
     return f'''"""
 {component_name}
 
 Intent: {file_path.replace(".py", ".intent")}
 Module: {module_id}
 
-Generated by AIC — fill in implementation after
-completing {component_name}.intent
+Generated by AIC — implement after completing intent file.
 """
 
 
@@ -176,62 +168,107 @@ class {component_name}:
 '''
 
 
-# ── Phase 1 — Validation ──────────────────────────────────────────────────────
+def _get_code_stub(language: str, component_name: str, module_id: str, file_path: str) -> str:
+    """Get language appropriate code stub content."""
+    stubs = {
+        "python": _generate_python_stub(component_name, module_id, file_path),
+        "java": (
+            f"// Intent: {file_path.replace('.java', '.intent')}\n"
+            f"// Module: {module_id}\n\n"
+            f"public class {component_name} {{\n"
+            f"    // TODO: implement after completing intent file\n"
+            f"}}\n"
+        ),
+        "swift": (
+            f"// Intent: {file_path.replace('.swift', '.intent')}\n"
+            f"// Module: {module_id}\n\n"
+            f"class {component_name} {{\n"
+            f"    // TODO: implement after completing intent file\n"
+            f"}}\n"
+        ),
+        "kotlin": (
+            f"// Intent: {file_path.replace('.kt', '.intent')}\n"
+            f"// Module: {module_id}\n\n"
+            f"class {component_name} {{\n"
+            f"    // TODO: implement after completing intent file\n"
+            f"}}\n"
+        ),
+        "apex": (
+            f"// Intent: {file_path.replace('.cls', '.intent')}\n"
+            f"// Module: {module_id}\n\n"
+            f"public class {component_name} {{\n"
+            f"    // TODO: implement after completing intent file\n"
+            f"}}\n"
+        ),
+        "typescript": (
+            f"// Intent: {file_path.replace('.ts', '.intent')}\n"
+            f"// Module: {module_id}\n\n"
+            f"export class {component_name} {{\n"
+            f"    // TODO: implement after completing intent file\n"
+            f"}}\n"
+        ),
+    }
+    return stubs.get(language, f"// {component_name}\n// Module: {module_id}\n")
 
-def _validate(
-    project_root: Path,
-    component_name: str,
-    language: str
-) -> None:
+
+def _get_code_extension(language: str, component_name: str) -> str:
+    """Get code file name for language."""
+    extensions = {
+        "python": f"{_to_snake_case(component_name)}.py",
+        "java": f"{component_name}.java",
+        "swift": f"{component_name}.swift",
+        "kotlin": f"{component_name}.kt",
+        "apex": f"{component_name}.cls",
+        "typescript": f"{component_name}.ts",
+        "flutter": f"{_to_snake_case(component_name)}.dart",
+        "lwc": f"{_to_snake_case(component_name)}.js",
+    }
+    return extensions.get(language, f"{component_name}.{language}")
+
+
+CODE_EXTENSIONS = {
+    ".py", ".java", ".swift", ".kt", ".cls", ".ts",
+    ".dart", ".js", ".go", ".cs", ".rb", ".php"
+}
+
+
+def _find_existing_code_file(target_dir: Path, component_name: str) -> Optional[Path]:
     """
-    Run all pre-flight checks before creating any files.
-    Fail loudly — do not create anything if checks fail.
+    Check if a code file with the component name already exists
+    at the target path. Returns the path if found, None otherwise.
     """
-    # Git check
-    if not is_git_repository(project_root):
-        raise GitNotInitialisedError()
-
-    # AIC initialised check
-    if not (project_root / "project.intent").exists():
-        raise NotInitialisedError()
-
-    # PascalCase validation
-    if not re.match(r'^[A-Z][a-zA-Z0-9]+$', component_name):
-        raise InvalidComponentNameError(component_name)
-
-    # Language folder check
-    language_dir = project_root / language
-    if not language_dir.exists():
-        raise LanguageFolderMissingError(language)
-
-    # Component already exists check
-    component_dir = language_dir / component_name
-    if component_dir.exists():
-        raise ComponentAlreadyExistsError(component_name, language)
+    for ext in CODE_EXTENSIONS:
+        # Check PascalCase name
+        candidate = target_dir / f"{component_name}{ext}"
+        if candidate.exists():
+            return candidate
+        # Check snake_case name
+        snake = _to_snake_case(component_name)
+        candidate = target_dir / f"{snake}{ext}"
+        if candidate.exists():
+            return candidate
+    return None
 
 
-# ── Phase 2 — Module resolution ───────────────────────────────────────────────
+# ── Module resolution ─────────────────────────────────────────────────────────
 
 def _resolve_module(
     project_root: Path,
-    component_name: str
+    component_name: str,
 ) -> tuple[str, bool]:
-    """
-    Find or create the module.intent for this component.
-    Returns (module_id, was_created).
-    If module.intent exists — read its ID.
-    If not — create it from template with auto-generated ID.
-    """
+    """Find or create module.intent. Returns (module_id, was_created)."""
     module_dir = project_root / "business" / component_name
     module_intent_path = module_dir / "module.intent"
 
     if module_intent_path.exists():
-        # Read existing module ID
-        content = yaml.safe_load(module_intent_path.read_text(encoding="utf-8"))
-        module_id = content.get("id", _generate_component_id(component_name, project_root))
+        content = yaml.safe_load(
+            module_intent_path.read_text(encoding="utf-8")
+        )
+        module_id = content.get("id", _generate_component_id(
+            component_name, project_root
+        ))
         return module_id, False
 
-    # Create new module.intent from template
     module_id = _generate_component_id(component_name, project_root)
 
     try:
@@ -242,10 +279,7 @@ def _resolve_module(
         raise FolderCreationError(str(module_dir))
 
     template = _get_template("module.intent.template")
-    context = {
-        "module_id": module_id,
-        "module_name": component_name,
-    }
+    context = {"module_id": module_id, "module_name": component_name}
     content = _render_template(template, context)
 
     try:
@@ -256,49 +290,56 @@ def _resolve_module(
     return module_id, True
 
 
-# ── Phase 3 — Language resolution ─────────────────────────────────────────────
-
-def _resolve_language(project_root: Path, language: str) -> str:
-    """
-    Read the language.intent file to get the language ID.
-    Returns language_id string.
-    Prints warning if language.intent is incomplete.
-    """
+def _resolve_language_id(project_root: Path, language: str) -> str:
+    """Read language.intent to get language ID."""
     language_dir = project_root / language
-
-    # Look for language.intent or <language>.intent
     candidates = [
         language_dir / "language.intent",
         language_dir / f"{language}.intent",
     ]
-
     for candidate in candidates:
         if candidate.exists():
             try:
-                content = yaml.safe_load(candidate.read_text(encoding="utf-8"))
+                content = yaml.safe_load(
+                    candidate.read_text(encoding="utf-8")
+                )
                 if content and "id" in content:
                     return content["id"]
             except Exception:
                 pass
 
-    # No language.intent found — warn but continue
     print_warning(
         f"No language.intent found in /{language}/\n"
-        f"  Consider creating {language}/{language}.intent\n"
-        f"  Using '{language}-guidelines' as default language ID"
+        f"Using '{language}-guidelines' as default language ID"
     )
     return f"{language}-guidelines"
 
 
-# ── Phase 4 — Folder creation ─────────────────────────────────────────────────
+# ── Mode A — Standard (no --path) ─────────────────────────────────────────────
 
-def _create_component_folder(project_root: Path, component_name: str, language: str) -> Path:
+def _create_standard(
+    project_root: Path,
+    component_name: str,
+    language: str,
+    module_id: str,
+    module_created: bool,
+    language_id: str,
+) -> None:
     """
-    Create the component folder at /<language>/<ComponentName>/
-    Returns the created folder path.
+    Original behavior — create subfolder + .intent + code stub.
     """
-    component_dir = project_root / language / component_name
+    # Validate language folder exists
+    language_dir = project_root / language
+    if not language_dir.exists():
+        raise LanguageFolderMissingError(language)
 
+    # Check component does not already exist
+    component_dir = language_dir / component_name
+    intent_path = component_dir / f"{component_name}.intent"
+    if intent_path.exists():
+        raise ComponentAlreadyExistsError(str(intent_path))
+
+    # Create component folder
     try:
         component_dir.mkdir(parents=True, exist_ok=False)
     except PermissionError:
@@ -306,41 +347,12 @@ def _create_component_folder(project_root: Path, component_name: str, language: 
     except OSError:
         raise FolderCreationError(str(component_dir))
 
-    return component_dir
-
-
-# ── Phase 5 — File generation ─────────────────────────────────────────────────
-
-def _generate_files(
-    component_dir: Path,
-    component_name: str,
-    module_id: str,
-    language_id: str,
-    language: str,
-) -> tuple[str, str]:
-    """
-    Generate component.intent and code stub inside component folder.
-    Returns (intent_file_name, stub_file_name).
-    """
-    # Determine file names based on language convention
-    language_file_extensions = {
-        "python": f"{_to_snake_case(component_name)}.py",
-        "java": f"{component_name}.java",
-        "swift": f"{component_name}.swift",
-        "kotlin": f"{component_name}.kt",
-        "typescript": f"{component_name}.ts",
-        "flutter": f"{_to_snake_case(component_name)}.dart",
-    }
-    stub_file_name = language_file_extensions.get(language, f"{component_name}.{language}")
-    intent_file_name = f"{component_name}.intent"
-
-    # Generate component ID
+    # Determine code file name
+    stub_file_name = _get_code_extension(language, component_name)
     component_id = f"{module_id}-{language[:3].upper()}"
-
-    # Relative file path for intent reference
     file_path = f"{language}/{component_name}/{stub_file_name}"
 
-    # Generate component.intent from template
+    # Generate component.intent
     template = _get_template("component.intent.template")
     context = {
         "component_id": component_id,
@@ -352,36 +364,23 @@ def _generate_files(
     intent_content = _render_template(template, context)
 
     try:
-        (component_dir / intent_file_name).write_text(intent_content, encoding="utf-8")
+        intent_path.write_text(intent_content, encoding="utf-8")
     except PermissionError:
-        raise PermissionDeniedError(str(component_dir / intent_file_name))
+        raise PermissionDeniedError(str(intent_path))
 
-    # Generate language appropriate code stub
-    stub_content = _generate_python_stub(component_name, module_id, file_path)
+    # Generate code stub
+    stub_content = _get_code_stub(language, component_name, module_id, file_path)
+    stub_path = component_dir / stub_file_name
 
     try:
-        (component_dir / stub_file_name).write_text(stub_content, encoding="utf-8")
+        stub_path.write_text(stub_content, encoding="utf-8")
     except PermissionError:
-        raise PermissionDeniedError(str(component_dir / stub_file_name))
+        raise PermissionDeniedError(str(stub_path))
 
-    return intent_file_name, stub_file_name
-
-
-# ── Phase 6 — Output ──────────────────────────────────────────────────────────
-
-def _print_success(
-    component_name: str,
-    language: str,
-    module_id: str,
-    module_created: bool,
-    intent_file: str,
-    stub_file: str,
-) -> None:
-    """Print success message with tree and next steps."""
+    # Output
     print_header(f"Component created — {component_name}")
 
     created_items = []
-
     if module_created:
         created_items.append((
             f"business/{component_name}/module.intent",
@@ -391,66 +390,201 @@ def _print_success(
         print_info(f"Linked to existing module: {module_id}")
 
     created_items.extend([
-        (f"{language}/{component_name}/{intent_file}", "component intent — fill in implementation details"),
-        (f"{language}/{component_name}/{stub_file}", "code stub — implement after completing intent"),
+        (
+            f"{language}/{component_name}/{component_name}.intent",
+            "component intent — fill in implementation details"
+        ),
+        (
+            f"{language}/{component_name}/{stub_file_name}",
+            "code stub — implement after completing intent"
+        ),
     ])
 
     print_success("Files created")
     print_tree(created_items)
 
-    next_steps = []
+    steps = []
     if module_created:
-        next_steps.append(f"Fill in business/{ component_name}/module.intent with business rules")
-    next_steps.extend([
-        f"Fill in {language}/{component_name}/{intent_file} with implementation details",
+        steps.append(f"Fill in business/{component_name}/module.intent")
+    steps.extend([
+        f"Fill in {language}/{component_name}/{component_name}.intent",
         f"Run: aic compile {component_name} --target {language}",
     ])
+    print_next_steps(steps)
 
-    print_next_steps(next_steps)
 
+# ── Mode B — Path mode (--path provided) ──────────────────────────────────────
 
-# ── Entry Point ───────────────────────────────────────────────────────────────
-
-def run_create(component_name: str, language: str) -> None:
+def _create_with_path(
+    project_root: Path,
+    component_name: str,
+    language: str,
+    custom_path: str,
+    module_id: str,
+    module_created: bool,
+    language_id: str,
+) -> None:
     """
-    Execute the aic create command.
-    All phases run in order. Any failure exits cleanly.
-    No files created if validation fails.
+    Path mode — go to exact path relative to project root.
+    If code file with component name exists → .intent only, links to it.
+    If no code file exists → .intent only, no stub created.
+    Never creates subfolder. Never creates code stub.
     """
+    # Resolve target directory
+    target_dir = project_root / custom_path
+
+    # Validate path does not escape project root
+    try:
+        target_dir.resolve().relative_to(project_root.resolve())
+    except ValueError:
+        raise InvalidPathError(
+            custom_path,
+            "path must be within the project root"
+        )
+
+    # Validate path is not inside .aic or business
+    parts = Path(custom_path).parts
+    if parts and parts[0] in {".aic", "business"}:
+        raise InvalidPathError(
+            custom_path,
+            "cannot create components inside .aic or business folders"
+        )
+
+    # Check intent does not already exist
+    intent_path = target_dir / f"{component_name}.intent"
+    if intent_path.exists():
+        raise ComponentAlreadyExistsError(str(intent_path))
+
+    # Create target directory if it does not exist
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        raise PermissionDeniedError(str(target_dir))
+
+    # Check if matching code file already exists
+    existing_code_file = _find_existing_code_file(target_dir, component_name)
+
+    # Determine file_path for intent linking
+    if existing_code_file:
+        file_path = str(existing_code_file.relative_to(project_root))
+        print_info(
+            f"Existing code file found: {file_path}\n"
+            "  .intent will link to it — no new stub created"
+        )
+    else:
+        # No existing file — intent only, file_path is a placeholder
+        expected_ext = _get_code_extension(language, component_name)
+        file_path = f"{custom_path}/{expected_ext}"
+        print_info(
+            "No existing code file found at path.\n"
+            "  Creating .intent only — create code file manually."
+        )
+
+    # Generate component.intent
+    component_id = f"{module_id}-{language[:3].upper()}"
+    template = _get_template("component.intent.template")
+    context = {
+        "component_id": component_id,
+        "module_id": module_id,
+        "language_id": language_id,
+        "component_name": component_name,
+        "file_path": file_path,
+    }
+    intent_content = _render_template(template, context)
+
+    try:
+        intent_path.write_text(intent_content, encoding="utf-8")
+    except PermissionError:
+        raise PermissionDeniedError(str(intent_path))
+
+    # Output
+    print_header(f"Component created — {component_name}")
+
+    created_items = []
+    if module_created:
+        created_items.append((
+            f"business/{component_name}/module.intent",
+            "business intent — fill in behaviors and journeys"
+        ))
+    else:
+        print_info(f"Linked to existing module: {module_id}")
+
+    created_items.append((
+        str(intent_path.relative_to(project_root)),
+        "component intent — fill in implementation details"
+    ))
+
+    if existing_code_file:
+        created_items.append((
+            file_path,
+            "existing code file — linked in intent"
+        ))
+
+    print_success("Files created")
+    print_tree(created_items)
+
+    steps = []
+    if module_created:
+        steps.append(f"Fill in business/{component_name}/module.intent")
+    steps.append(
+        f"Fill in {intent_path.relative_to(project_root)}"
+    )
+    if not existing_code_file:
+        steps.append(
+            f"Create code file manually at: {file_path}"
+        )
+    steps.append(
+        f"Run: aic compile {component_name} --target {language}"
+    )
+    print_next_steps(steps)
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def run_create(
+    component_name: str,
+    language: str,
+    custom_path: Optional[str] = None,
+) -> None:
+    """Execute the aic create command."""
     project_root = Path.cwd()
 
     try:
-        # Phase 1 — Validation
-        _validate(project_root, component_name, language)
+        # Validation
+        if not is_git_repository(project_root):
+            raise GitNotInitialisedError()
+
+        if not (project_root / "project.intent").exists():
+            raise NotInitialisedError()
+
+        if not re.match(r'^[A-Z][a-zA-Z0-9]+$', component_name):
+            raise InvalidComponentNameError(component_name)
+
+        # Resolve module and language
+        module_id, module_created = _resolve_module(project_root, component_name)
+        language_id = _resolve_language_id(project_root, language)
+
         print_info(f"Creating component: {component_name} for {language}")
 
-        # Phase 2 — Module resolution
-        module_id, module_created = _resolve_module(project_root, component_name)
-
-        # Phase 3 — Language resolution
-        language_id = _resolve_language(project_root, language)
-
-        # Phase 4 — Folder creation
-        component_dir = _create_component_folder(project_root, component_name, language)
-
-        # Phase 5 — File generation
-        intent_file, stub_file = _generate_files(
-            component_dir,
-            component_name,
-            module_id,
-            language_id,
-            language,
-        )
-
-        # Phase 6 — Output
-        _print_success(
-            component_name,
-            language,
-            module_id,
-            module_created,
-            intent_file,
-            stub_file,
-        )
+        if custom_path:
+            _create_with_path(
+                project_root,
+                component_name,
+                language,
+                custom_path,
+                module_id,
+                module_created,
+                language_id,
+            )
+        else:
+            _create_standard(
+                project_root,
+                component_name,
+                language,
+                module_id,
+                module_created,
+                language_id,
+            )
 
     except GitNotInitialisedError as e:
         print_error(e.message)
@@ -469,6 +603,10 @@ def run_create(component_name: str, language: str) -> None:
         raise SystemExit(1)
 
     except ComponentAlreadyExistsError as e:
+        print_error(e.message)
+        raise SystemExit(1)
+
+    except InvalidPathError as e:
         print_error(e.message)
         raise SystemExit(1)
 

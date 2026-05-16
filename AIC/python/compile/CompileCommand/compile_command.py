@@ -1,33 +1,28 @@
 """
-AIC Compile Command
+AIC Compile Command v2
 Implements: aic compile <ComponentName> --target <language[@version]>
 
-Compiles a component.intent file to target language using configured AI.
-Uses delta-based compilation — only changed sections sent to AI.
-
-Inheritance chain:
-  project.intent
-      ↓ python.intent
-      ↓ business/compile/module.intent
-      ↓ python/compile/CompileCommand/CompileCommand.intent
-      ↓ this file
+Key fix: when module.intent or language.intent changes,
+compile now also updates component.intent with corresponding
+intent stubs and informs the developer what changed.
 
 Four phases:
-  Phase 1 — Retrieval    (deterministic) — read intent files
-  Phase 2 — Diff         (deterministic) — compute delta vs lockfile
-  Phase 3 — Inference    (LLM)           — call AI provider
-  Phase 4 — Validation   (deterministic) — write output and lockfile
+  Phase 1 — Retrieval    (deterministic)
+  Phase 2 — Diff         (deterministic) — now tracks all levels
+  Phase 3 — Inference    (LLM)
+  Phase 4 — Write        (deterministic) — now updates component.intent too
 """
 
+import hashlib
+import re
 import time
 from pathlib import Path
 
-import click
+import yaml
 
 from core.exceptions import (
     AICError,
     GitNotInitialisedError,
-    IntentLibraryMissingError,
     PermissionDeniedError,
 )
 from core.intent_parser import IntentParseError
@@ -48,20 +43,18 @@ from utils.terminal import (
     print_success,
     print_warning,
 )
+from colorama import Fore, Style
+
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 
 class NotInitialisedError(AICError):
     exit_code = 1
-    message = (
-        "AIC is not initialised in this directory.\n"
-        "Run: aic init"
-    )
+    message = "AIC is not initialised in this directory.\nRun: aic init"
 
 
 class ComponentNotFoundError(AICError):
     exit_code = 1
-
     def __init__(self, component_name: str, language: str):
         self.message = (
             f"Component not found: /{language}/{component_name}\n"
@@ -74,14 +67,13 @@ class ProviderNotConfiguredError(AICError):
     exit_code = 1
     message = (
         "AI provider not configured.\n"
-        "Fill in .aic/config.json with your provider details.\n"
+        "Fill in .aic/aic.config.json with your provider details.\n"
         "Supported providers: claude, gemini, ollama"
     )
 
 
 class OutputWriteError(AICError):
     exit_code = 2
-
     def __init__(self, path: str):
         self.message = f"Failed to write output file: {path}"
         super().__init__(self.message)
@@ -90,56 +82,165 @@ class OutputWriteError(AICError):
 # ── Provider factory ──────────────────────────────────────────────────────────
 
 def _get_provider(config: AICConfig):
-    """
-    Return the appropriate provider adapter based on config.
-    Adapter pattern — all providers implement BaseProvider interface.
-    """
     if config.provider == "claude":
-        from providers.claude_provider import ClaudeProvider
+        from providers.claude import ClaudeProvider
         return ClaudeProvider(model=config.model, api_key=config.api_key)
-
     elif config.provider == "gemini":
-        from providers.gemini_provider import GeminiProvider
+        from providers.gemini import GeminiProvider
         return GeminiProvider(model=config.model, api_key=config.api_key)
-
     elif config.provider == "ollama":
-        from providers.ollama_provider import OllamaProvider
-        return OllamaProvider(
-            model=config.model,
-            api_key="",
-            endpoint=config.endpoint or ""
-        )
-
+        from providers.ollama import OllamaProvider
+        return OllamaProvider(model=config.model, api_key="", endpoint=config.endpoint or "")
     else:
         raise ProviderNotConfiguredError()
+
+
+def _to_snake_case(name: str) -> str:
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+
+
+# ── Component intent updater ──────────────────────────────────────────────────
+
+def _build_intent_stubs_for_module_changes(
+    module_changes: dict,
+    existing_component_intent: dict,
+) -> dict:
+    """
+    When module.intent behaviors change, build corresponding
+    implementation stub entries for component.intent.
+    Only adds stubs for NEW behaviors — does not overwrite existing ones.
+    Returns dict of sections to merge into component.intent.
+    """
+    updates = {}
+
+    # Check if behaviors changed in module
+    if "behaviors" not in module_changes:
+        return updates
+
+    new_behaviors = module_changes["behaviors"].get("new", [])
+    old_behaviors = module_changes["behaviors"].get("old", [])
+
+    if not new_behaviors or not isinstance(new_behaviors, list):
+        return updates
+
+    # Find behavior IDs that are new
+    old_ids = set()
+    if old_behaviors and isinstance(old_behaviors, list):
+        for b in old_behaviors:
+            if isinstance(b, dict):
+                old_ids.add(b.get("id", ""))
+
+    new_stubs = []
+    existing_impl = existing_component_intent.get("implementation", [])
+    existing_impl_ids = set()
+    if isinstance(existing_impl, list):
+        for impl in existing_impl:
+            if isinstance(impl, dict):
+                existing_impl_ids.add(impl.get("id", ""))
+
+    for behavior in new_behaviors:
+        if not isinstance(behavior, dict):
+            continue
+        behavior_id = behavior.get("id", "")
+        # Skip if already in component.intent implementation
+        if behavior_id in existing_impl_ids:
+            continue
+        # Skip if this was in the old behaviors too
+        if behavior_id in old_ids:
+            continue
+
+        # Create a stub implementation entry
+        stub_id = f"{behavior_id}-IMPL"
+        new_stubs.append({
+            "id": stub_id,
+            "intent": (
+                f"# TODO: implement {behavior_id}\n"
+                f"# Business intent: {behavior.get('intent', '').strip()[:100]}\n"
+                f"# Add platform-specific implementation details here"
+            )
+        })
+
+    if new_stubs:
+        # Merge with existing implementation
+        existing = list(existing_impl) if isinstance(existing_impl, list) else []
+        updates["implementation"] = existing + new_stubs
+
+    return updates
+
+
+def _update_component_intent(
+    component_intent_path: Path,
+    component_intent: dict,
+    updates: dict,
+    component_name: str,
+    module_changes: dict,
+    language_changes: dict,
+) -> dict:
+    """
+    Merge updates into component.intent file.
+    Prints clear summary of what was added.
+    Returns updated component intent dict.
+    """
+    if not updates:
+        return component_intent
+
+    # Merge updates
+    updated = {**component_intent}
+    for key, value in updates.items():
+        updated[key] = value
+
+    # Write updated component.intent
+    updated_yaml = yaml.dump(updated, default_flow_style=False, allow_unicode=True)
+    component_intent_path.write_text(updated_yaml, encoding="utf-8")
+
+    # Inform developer what changed
+    print(f"\n{Fore.CYAN}{'─' * 60}")
+    print(f"component.intent updated — {component_name}")
+    print(f"{'─' * 60}{Style.RESET_ALL}")
+
+    if module_changes:
+        print(f"{Fore.YELLOW}module.intent changed — these sections updated in component.intent:{Style.RESET_ALL}")
+        for key in module_changes:
+            if not key.startswith("_"):
+                print(f"  + {key}")
+
+    if language_changes:
+        print(f"{Fore.YELLOW}language.intent changed — these sections updated in component.intent:{Style.RESET_ALL}")
+        for key in language_changes:
+            if not key.startswith("_"):
+                print(f"  + {key}")
+
+    if "implementation" in updates:
+        new_stubs = [
+            item for item in updates["implementation"]
+            if isinstance(item, dict) and "TODO" in item.get("intent", "")
+        ]
+        if new_stubs:
+            print(f"{Fore.CYAN}New implementation stubs added — fill these in:{Style.RESET_ALL}")
+            for stub in new_stubs:
+                print(f"  → {stub.get('id', '')}")
+
+    print(f"{Fore.CYAN}{'─' * 60}{Style.RESET_ALL}\n")
+
+    return updated
 
 
 # ── Verification ──────────────────────────────────────────────────────────────
 
 def _verify_output(generated_code: str, component_intent: dict) -> list[tuple[str, bool]]:
-    """
-    Basic static verification — check declared behaviors exist in output.
-    Returns list of (behavior_id, passed) tuples.
-    Never fails compilation — warnings only.
-    """
     results = []
     behaviors = component_intent.get("implementation", [])
-
     for behavior in behaviors:
         if isinstance(behavior, dict):
             behavior_id = behavior.get("id", "")
             intent_text = behavior.get("intent", "")
-
-            # Extract key words from intent description
             keywords = [
                 word.lower()
                 for word in intent_text.split()
                 if len(word) > 4
-            ][:3]  # Check first 3 meaningful words
-
+            ][:3]
             passed = any(kw in generated_code.lower() for kw in keywords)
             results.append((behavior_id, passed))
-
     return results
 
 
@@ -151,16 +252,11 @@ def run_compile(
     force: bool = False,
     verify: bool = False,
 ) -> None:
-    """
-    Execute the aic compile command.
-    Four deterministic phases with one LLM phase in the middle.
-    No files written if any phase fails.
-    """
     project_root = Path.cwd()
     start_time = time.time()
 
     try:
-        # ── Pre-flight validation ─────────────────────────────────────────────
+        # Pre-flight validation
         if not is_git_repository(project_root):
             raise GitNotInitialisedError()
 
@@ -204,7 +300,14 @@ def run_compile(
             lockfile_manager.delete(component_name, target)
 
         lockfile = lockfile_manager.read(component_name, target)
-        delta = DeltaEngine.compute(context.component, lockfile)
+
+        # Pass module and language intent for cross-level delta detection
+        delta = DeltaEngine.compute(
+            current_component_intent=context.component,
+            lockfile=lockfile,
+            current_module_intent=context.module,
+            current_language_intent=context.language,
+        )
 
         if delta.is_unchanged:
             print_success("Nothing changed — compilation skipped")
@@ -215,7 +318,22 @@ def run_compile(
             print_success("First compilation — full generation")
         else:
             changed = list(delta.changed_sections.keys())
-            print_success(f"Delta computed — {len(changed)} section(s) changed: {', '.join(changed)}")
+            module_changed = list(delta.module_changes.keys())
+            language_changed = list(delta.language_changes.keys())
+
+            if changed:
+                print_success(
+                    f"Delta computed — component.intent changed: "
+                    f"{', '.join(changed)}"
+                )
+            if module_changed:
+                print_warning(
+                    f"module.intent changed: {', '.join(k for k in module_changed if not k.startswith('_'))}"
+                )
+            if language_changed:
+                print_warning(
+                    f"language.intent changed: {', '.join(k for k in language_changed if not k.startswith('_'))}"
+                )
 
         # ── Phase 3 — Inference ───────────────────────────────────────────────
         print_info(f"Phase 3 — Calling {config.provider} ({config.model})...")
@@ -226,12 +344,12 @@ def run_compile(
 
         print_success(f"Code received from {config.provider}")
 
-        # ── Phase 4 — Write and lockfile ──────────────────────────────────────
+        # ── Phase 4 — Write ───────────────────────────────────────────────────
         print_info("Phase 4 — Writing output...")
 
+        # Determine output path
         file_field = context.component.get("file", "")
         if not file_field:
-            # Derive output path from component name and language
             language_extensions = {
                 "python": f"{_to_snake_case(component_name)}.py",
                 "java": f"{component_name}.java",
@@ -254,11 +372,29 @@ def run_compile(
 
         print_success(f"Written: {output_path.relative_to(project_root)}")
 
-        # Verify if --verify flag set
+        # ── Update component.intent if module/language changed ────────────────
+        component_intent_path = component_dir / f"{component_name}.intent"
+        current_component_intent = context.component
+
+        if delta.module_changes or delta.language_changes:
+            intent_updates = _build_intent_stubs_for_module_changes(
+                delta.module_changes,
+                current_component_intent,
+            )
+            current_component_intent = _update_component_intent(
+                component_intent_path,
+                current_component_intent,
+                intent_updates,
+                component_name,
+                delta.module_changes,
+                delta.language_changes,
+            )
+
+        # ── Verify if --verify flag ───────────────────────────────────────────
         verified = False
         if verify:
             print_info("Running verification...")
-            verification_results = _verify_output(generated_code, context.component)
+            verification_results = _verify_output(generated_code, current_component_intent)
             verified = all(passed for _, passed in verification_results)
             for behavior_id, passed in verification_results:
                 if passed:
@@ -266,19 +402,33 @@ def run_compile(
                 else:
                     print_warning(f"  {behavior_id} — not verified (review manually)")
 
-        # Write lockfile
-        intent_hash = DeltaEngine.compute_hash(context.component)
+        # ── Write lockfile ────────────────────────────────────────────────────
+        intent_hash = DeltaEngine.compute_hash(current_component_intent)
+        generated_code_hash = hashlib.sha256(
+            generated_code.encode("utf-8")
+        ).hexdigest()
+
+        # Store module and language hashes in snapshot for future delta detection
+        snapshot = {**current_component_intent}
+        if context.module:
+            snapshot["_module_hash"] = DeltaEngine.compute_hash(context.module)
+            snapshot["_module_snapshot"] = context.module
+        if context.language:
+            snapshot["_language_hash"] = DeltaEngine.compute_hash(context.language)
+            snapshot["_language_snapshot"] = context.language
+
         entry = LockfileEntry(
             component_name=component_name,
             language=target.language,
             version=target.version,
             intent_hash=intent_hash,
+            code_hash=generated_code_hash,
             provider=config.provider,
             model=config.model,
             generated_at=LockfileManager.now(),
             target=str(target),
             verified=verified,
-            intent_snapshot=context.component,
+            intent_snapshot=snapshot,
         )
         lockfile_manager.write(entry, target)
         print_success("Lockfile updated")
@@ -325,9 +475,3 @@ def run_compile(
     except PermissionDeniedError as e:
         print_error(e.message)
         raise SystemExit(2)
-
-
-def _to_snake_case(name: str) -> str:
-    """Convert PascalCase to snake_case."""
-    import re
-    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()

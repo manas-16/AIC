@@ -1,0 +1,112 @@
+id: AIC-NAV-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-NAV-001
+  language: aic-python-guidelines
+
+component: NavigateCommand
+file: python/navigate/NavigateCommand/navigate_command.py
+
+implementation:
+  - id: AIC-NAV-001-PY-I1
+    intent: |
+      Entry point is a Click command named navigate().
+      Accepts:
+        --query: str     ← required, natural language task description
+        --copy: bool     ← optional, copy output to clipboard
+        --file: bool     ← optional, write output to .aic/context/
+      All output deterministic — zero LLM calls.
+
+  - id: AIC-NAV-001-PY-I2
+    intent: |
+      Phase 1 — Query parsing (deterministic).
+      Extract component name by matching query words against
+      known component names found in /business folder.
+      Extract language by matching query words against
+      known language folders in project root.
+      Extract action type from keywords:
+        fix, create, migrate, explain, audit, update, add, remove
+      If component ambiguous — list all business folder names
+      and ask developer to clarify. Do not guess.
+
+  - id: AIC-NAV-001-PY-I3
+    intent: |
+      Phase 2 — File traversal (deterministic).
+      Always read project.intent first — always in scope.
+      If component matched — read business/<Component>/module.intent.
+      If language matched — read <language>/<language>.intent or language.intent.
+      If component + language matched — read
+        <language>/<Component>/<Component>.intent.
+      If component not matched — list business folder names only.
+      Do not read sibling components — scope pollution prevention.
+
+  - id: AIC-NAV-001-PY-I4
+    intent: |
+      Phase 3 — Context assembly (deterministic).
+      Concatenate all read files into one structured context block.
+      Add header identifying what the context covers.
+      Add footer with usage instruction.
+      Format:
+
+      ─────────────────────────────────────────
+      AIC CONTEXT: <query>
+      ─────────────────────────────────────────
+      [PROJECT STANDARDS]
+      <project.intent contents>
+      ─────────────────────────────────────────
+      [BUSINESS INTENT: <ComponentName>]
+      <module.intent contents>
+      ─────────────────────────────────────────
+      [LANGUAGE GUIDELINES: <language>]
+      <language.intent contents>
+      ─────────────────────────────────────────
+      [COMPONENT INTENT: <ComponentName> / <language>]
+      <component.intent contents>
+      ─────────────────────────────────────────
+      Paste this context into your AI before describing your task.
+      ─────────────────────────────────────────
+
+  - id: AIC-NAV-001-PY-I5
+    intent: |
+      Phase 4 — Output (deterministic).
+      Default: print assembled context to terminal.
+      --copy flag: copy to clipboard using pyperclip if available.
+        If pyperclip not installed print warning and fall back to terminal.
+      --file flag: write to .aic/context/<query-slug>.txt
+        query-slug is query string lowercased, spaces replaced with hyphens.
+        Print file path after writing.
+
+  - id: AIC-NAV-001-PY-I6
+    intent: |
+      If no component matched in query:
+        Print list of available components from /business folder.
+        Print message: "No component matched your query."
+        Print message: "Try: aic navigate --query '<ComponentName> your task'"
+        Exit 0 — not an error, developer needs to refine query.
+
+  - id: AIC-NAV-001-PY-I7
+    intent: |
+      Always print a one-line summary before the context block:
+        "Context assembled for: <matched components and language>"
+      Always print file count:
+        "Files included: X"
+      This helps developer confirm the right files were picked.
+
+platform-specific:
+  - Clipboard copy uses pyperclip — optional dependency
+  - Graceful fallback to terminal if pyperclip not installed
+  - File slugification handles special characters safely
+
+error-handling:
+  - NotInitialisedError     → exit code 1
+  - GitNotInitialisedError  → exit code 1
+  - No match found          → exit code 0, list available components
+  - File write error        → exit code 2, fall back to terminal output
+
+implementation-note: |
+  This command contains zero LLM calls.
+  All four phases are fully deterministic.
+  This is the bridge between developer query and AI context.
+  Manual note for v1: developer pastes output into AI chat manually.
+  MCP server wrapping this command is planned for v2.

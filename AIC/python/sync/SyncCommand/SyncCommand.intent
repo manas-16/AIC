@@ -1,0 +1,96 @@
+id: AIC-SYNC-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-SYNC-001
+  language: aic-python-guidelines
+
+component: SyncCommand
+file: python/sync/SyncCommand/sync_command.py
+
+implementation:
+  - id: AIC-SYNC-001-PY-I1
+    intent: |
+      Entry point is a Click command named sync().
+      Accepts:
+        component_name: str   ← positional, required
+        --language: str       ← required
+        --approve: bool       ← apply existing suggestions to component.intent
+        --reject: bool        ← discard existing suggestions
+      --approve and --reject are mutually exclusive.
+      No flags — generate suggestions and show them.
+
+  - id: AIC-SYNC-001-PY-I2
+    intent: |
+      Phase 1 — Validation (deterministic).
+      Check git, AIC init, component exists, lockfile exists.
+      Read component.intent via yaml.safe_load.
+      Read generated code file as raw text.
+      Raise clear errors if either file missing.
+
+  - id: AIC-SYNC-001-PY-I3
+    intent: |
+      Phase 2 — AI comparison (LLM).
+      Build prompt with two sections:
+        Section 1: current component.intent as YAML
+        Section 2: current generated code file as text
+      Instruction to AI:
+        "Compare this code against this intent.
+         Identify what is in the code that is missing or
+         different from the intent.
+         Return ONLY the YAML sections that need updating.
+         Match the existing intent format exactly.
+         If code and intent are in sync return: NO_CHANGES_NEEDED"
+      Call configured AI provider.
+      If response is NO_CHANGES_NEEDED print clean message and exit.
+
+  - id: AIC-SYNC-001-PY-I4
+    intent: |
+      Phase 3 — Display suggestions (deterministic).
+      Parse AI response as YAML.
+      Print suggested changes clearly:
+        Current intent section shown in yellow
+        Suggested update shown in green
+      Save suggestions to .aic/sync-proposals/<Component>-<language>.proposal
+      Print approval and rejection commands below.
+
+  - id: AIC-SYNC-001-PY-I5
+    intent: |
+      --approve flow (deterministic):
+        Read .aic/sync-proposals/<Component>-<language>.proposal
+        If not found — print clear message to run sync first.
+        Parse proposal as YAML.
+        Merge into existing component.intent using dict update.
+        Write updated component.intent.
+        Compute new intent hash and code hash.
+        Update lockfile.
+        Delete proposal file.
+        Print success.
+
+  - id: AIC-SYNC-001-PY-I6
+    intent: |
+      --reject flow (deterministic):
+        Delete .aic/sync-proposals/<Component>-<language>.proposal if exists.
+        Print message — no changes made.
+        Suggest aic compile --force if developer wants to reset code to intent.
+
+  - id: AIC-SYNC-001-PY-I7
+    intent: |
+      Sync prompt structure:
+        "CURRENT COMPONENT INTENT:\n<yaml>\n\n
+         CURRENT CODE:\n<code>\n\n
+         Compare the code against the intent.
+         What is in the code that is not captured in the intent?
+         Return ONLY the YAML sections that need to be added or updated.
+         Use the exact same format as the intent file above.
+         If everything matches return exactly: NO_CHANGES_NEEDED"
+
+error-handling:
+  - GitNotInitialisedError      → exit code 1
+  - NotInitialisedError         → exit code 1
+  - ComponentNotFoundError      → exit code 1
+  - NoLockfileError             → exit code 1
+  - ProviderNotConfiguredError  → exit code 1
+  - ProviderCallError           → exit code 2, no changes made
+  - IntentWriteError            → exit code 2, proposal preserved
+  - NoProposalError             → exit code 1, run sync first

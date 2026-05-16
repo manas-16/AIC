@@ -1,0 +1,127 @@
+id: AIC-ASK-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic ask
+command: aic ask --query "your question or fix request"
+description: >
+  Conversational AI interface for the repository.
+  Assembles scoped intent context, sends it with the query to AI,
+  and returns the answer or applies the fix.
+  Two modes: question mode and fix mode.
+  Fix mode applies code changes then triggers sync automatically.
+
+behaviors:
+  - id: AIC-ASK-001-B1
+    intent: |
+      Determine query scope from the query text.
+      Scope rules:
+        Component mentioned by name → component scope
+        Multiple components mentioned → multi-component scope
+        No component mentioned → project scope
+      Language detected from query or defaults to all languages.
+      Scope determines which files get assembled as context.
+
+  - id: AIC-ASK-001-B2
+    intent: |
+      Assemble context based on scope.
+      Component scope:
+        project.intent
+        business/<Component>/module.intent
+        <language>/<language>.intent
+        All .intent files inside <language>/<Component>/
+        All code files inside <language>/<Component>/
+      Multi-component scope:
+        project.intent
+        All mentioned components module.intent files
+        All mentioned components code files
+      Project scope:
+        project.intent
+        All module.intent files in /business/
+        No code files — intent only for project level
+
+  - id: AIC-ASK-001-B3
+    intent: |
+      Question mode (default, no --fix flag).
+      Send assembled context + query to AI.
+      Print AI response directly to terminal.
+      No files modified.
+
+  - id: AIC-ASK-001-B4
+    intent: |
+      Fix mode (--fix flag present).
+      Send assembled context + query + existing code to AI.
+      AI returns fixed code for each affected file.
+      Write fixed code to the correct file(s).
+      After writing — automatically trigger sync for each modified file.
+      Print summary of what files were changed.
+
+  - id: AIC-ASK-001-B5
+    intent: |
+      For multi-file components — AI decides which files to touch.
+      AI response in fix mode must include file paths explicitly.
+      AIC parses the response to extract per-file code blocks.
+      Each file written independently.
+      Sync triggered per file after writing.
+
+  - id: AIC-ASK-001-B6
+    intent: |
+      After fix mode completes print clear summary:
+        Files modified: list of paths
+        Sync status: intent updated or pending approval
+        Next step: aic status to verify
+
+  - id: AIC-ASK-001-B7
+    intent: |
+      Support --language flag to scope to one language.
+      Without --language include all language folders for the component.
+      For fix mode --language is required if component exists in
+      multiple languages — cannot fix in all simultaneously.
+
+journeys:
+  - actor: Developer
+    trigger: Asks a question about UserService
+    outcome: |
+      Context assembled from project.intent, module.intent,
+      language.intent, all UserService intent and code files.
+      AI answer printed to terminal.
+      No files modified.
+
+  - actor: Developer
+    trigger: Asks to fix a bug in UserService with --fix
+    outcome: |
+      Context assembled.
+      AI returns fixed code.
+      Code file written.
+      Sync triggered automatically.
+      Summary printed — file changed, intent updated or pending.
+
+  - actor: Developer
+    trigger: Asks a project-level question
+    outcome: |
+      project.intent and all module.intent files assembled.
+      AI answers with full project context.
+      No code files read — intent only.
+
+  - actor: Developer
+    trigger: Asks about multiple components
+    outcome: |
+      All mentioned component intent and code files assembled.
+      AI answers with full multi-component context.
+
+failure-modes:
+  - scenario: AI provider not configured
+    response: Exit code 1 — suggest filling aic.config.json
+
+  - scenario: Component not found in query
+    response: List available components, suggest refining query
+
+  - scenario: Fix mode with multiple languages and no --language flag
+    response: Exit code 1 — ask developer to specify --language
+
+  - scenario: AI provider call fails
+    response: Exit code 2 — no files modified
+
+  - scenario: Fix response cannot be parsed into file blocks
+    response: Print raw AI response — ask developer to apply manually

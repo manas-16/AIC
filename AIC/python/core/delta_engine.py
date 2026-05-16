@@ -1,10 +1,10 @@
 """
-AIC Delta Engine
+AIC Delta Engine v2
 Computes what changed between old and new intent.
 Phase 2 of compilation — fully deterministic, zero LLM.
 
-The delta is the ONLY thing sent to the AI in Phase 3.
-This is what makes AIC delta-based not full-regeneration.
+Tracks delta source — which level of the inheritance chain changed.
+This is used by compile to know what to update in component.intent.
 """
 
 import hashlib
@@ -19,13 +19,19 @@ from models.lockfile import LockfileEntry
 class IntentDelta:
     """
     Represents what changed between old and new intent.
-    If is_new is True — no previous version exists, full generation needed.
-    If is_unchanged is True — nothing changed, skip compilation.
-    Otherwise changed_sections contains only what changed.
+
+    is_new        — no lockfile, first compilation, full generation
+    is_unchanged  — nothing changed, skip compilation
+    changed_sections — what changed in component.intent
+    module_changes   — what changed in module.intent (business level)
+    language_changes — what changed in language.intent
+    full_intent   — current full component intent
     """
     is_new: bool = False
     is_unchanged: bool = False
     changed_sections: dict = field(default_factory=dict)
+    module_changes: dict = field(default_factory=dict)    # ← new
+    language_changes: dict = field(default_factory=dict)  # ← new
     full_intent: dict = field(default_factory=dict)
 
 
@@ -34,11 +40,7 @@ class DeltaEngine:
 
     @staticmethod
     def compute_hash(intent: dict) -> str:
-        """
-        Compute SHA256 hash of intent dict.
-        Used to detect changes between compilations.
-        Deterministic — same intent always produces same hash.
-        """
+        """Compute SHA256 hash of intent dict."""
         serialised = json.dumps(intent, sort_keys=True, ensure_ascii=True)
         return hashlib.sha256(serialised.encode("utf-8")).hexdigest()
 
@@ -46,14 +48,12 @@ class DeltaEngine:
     def compute(
         current_component_intent: dict,
         lockfile: Optional[LockfileEntry],
+        current_module_intent: dict = None,
+        current_language_intent: dict = None,
     ) -> IntentDelta:
         """
         Compare current intent against lockfile snapshot.
-
-        Three outcomes:
-          1. No lockfile → is_new=True → full generation
-          2. Hash matches → is_unchanged=True → skip compilation
-          3. Hash differs → changed_sections contains delta → partial update
+        Also tracks changes at module and language level.
         """
         current_hash = DeltaEngine.compute_hash(current_component_intent)
 
@@ -64,29 +64,53 @@ class DeltaEngine:
                 full_intent=current_component_intent,
             )
 
-        # Case 2 — nothing changed
-        if current_hash == lockfile.intent_hash:
+        # Case 2 — nothing changed at any level
+        component_unchanged = current_hash == lockfile.intent_hash
+
+        # Check module level changes
+        module_changes = {}
+        if current_module_intent:
+            stored_module_hash = lockfile.intent_snapshot.get("_module_hash", "")
+            current_module_hash = DeltaEngine.compute_hash(current_module_intent)
+            if stored_module_hash and current_module_hash != stored_module_hash:
+                old_module = lockfile.intent_snapshot.get("_module_snapshot", {})
+                module_changes = DeltaEngine._diff_dicts(old_module, current_module_intent)
+
+        # Check language level changes
+        language_changes = {}
+        if current_language_intent:
+            stored_language_hash = lockfile.intent_snapshot.get("_language_hash", "")
+            current_language_hash = DeltaEngine.compute_hash(current_language_intent)
+            if stored_language_hash and current_language_hash != stored_language_hash:
+                old_language = lockfile.intent_snapshot.get("_language_snapshot", {})
+                language_changes = DeltaEngine._diff_dicts(old_language, current_language_intent)
+
+        # If nothing changed at any level
+        if component_unchanged and not module_changes and not language_changes:
             return IntentDelta(is_unchanged=True)
 
-        # Case 3 — compute delta
-        old_intent = lockfile.intent_snapshot
-        changed_sections = DeltaEngine._diff_dicts(old_intent, current_component_intent)
+        # Compute component delta
+        changed_sections = {}
+        if not component_unchanged:
+            old_intent = lockfile.intent_snapshot
+            changed_sections = DeltaEngine._diff_dicts(old_intent, current_component_intent)
 
         return IntentDelta(
             changed_sections=changed_sections,
+            module_changes=module_changes,
+            language_changes=language_changes,
             full_intent=current_component_intent,
         )
 
     @staticmethod
     def _diff_dicts(old: dict, new: dict) -> dict:
-        """
-        Find keys that changed, were added, or were removed.
-        Returns dict containing only changed sections.
-        """
+        """Find keys that changed, were added, or were removed."""
         changed = {}
-
         all_keys = set(old.keys()) | set(new.keys())
         for key in all_keys:
+            # Skip internal tracking keys
+            if key.startswith("_"):
+                continue
             old_val = old.get(key)
             new_val = new.get(key)
             if old_val != new_val:
@@ -94,5 +118,4 @@ class DeltaEngine:
                     "old": old_val,
                     "new": new_val,
                 }
-
         return changed

@@ -27,7 +27,7 @@ class AICConfig:
         """
         from core.exceptions import ProviderNotConfiguredError
 
-        config_path = project_root / ".aic" / "config.json"
+        config_path = project_root / ".aic" / "aic.config.json"
         if not config_path.exists():
             raise ProviderNotConfiguredError()
 

@@ -1,0 +1,124 @@
+id: AIC-NAV-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic navigate
+command: aic navigate --query "your task description"
+description: >
+  Traverses the project intent structure based on a natural language
+  query and assembles a scoped context package containing exactly
+  the right intent files for that task.
+  No AI involved. No code generated. Pure deterministic traversal.
+  Output is ready to paste into any AI tool.
+
+behaviors:
+  - id: AIC-NAV-001-B1
+    intent: |
+      Parse the query to extract component name, language, and action.
+      Match component name against known /business subfolders.
+      Match language against known language folders in project root.
+      Match action from keywords: fix, create, migrate, explain, audit.
+      If component is ambiguous list all business folder names
+      and ask developer to clarify. Do not guess.
+
+  - id: AIC-NAV-001-B2
+    intent: |
+      Always read project.intent first regardless of query.
+      It is always in scope for every task without exception.
+
+  - id: AIC-NAV-001-B3
+    intent: |
+      If component matched read business/<Component>/module.intent.
+      If language matched read <language>/language.intent.
+      If both matched read <language>/<Component>/<Component>.intent.
+      Never read sibling component folders — scope pollution prevention.
+
+  - id: AIC-NAV-001-B4
+    intent: |
+      Assemble all read files into one structured context block.
+      Each section separated by a border line with its title.
+      Add header identifying what the context covers.
+      Add footer instructing developer to paste into AI before their question.
+
+  - id: AIC-NAV-001-B5
+    intent: |
+      Support three output modes:
+        Default  — print to terminal
+        --copy   — copy to clipboard via pyperclip
+        --file   — write to .aic/context/<query-slug>.txt
+      Gracefully fall back to terminal if clipboard copy fails.
+
+  - id: AIC-NAV-001-B6
+    intent: |
+      If no component or language matched in query:
+        List all available business folder names.
+        Print helpful message suggesting query refinement.
+        Exit cleanly — not an error.
+
+  - id: AIC-NAV-001-B7
+    intent: |
+      Print a summary line before the context block:
+        "Context assembled for: component=X, language=Y"
+        "Files included: N"
+      Helps developer confirm the right files were picked.
+
+journeys:
+  - actor: Developer
+    trigger: Runs aic navigate --query "fix UserService in python"
+    outcome: |
+      project.intent, module.intent, python.intent,
+      and UserService.intent assembled into one context block.
+      Printed to terminal ready to paste into AI.
+
+  - actor: Developer
+    trigger: Runs aic navigate --query "fix UserService" with --copy
+    outcome: |
+      Same context assembled and copied to clipboard automatically.
+      Developer pastes directly into AI chat.
+
+  - actor: Developer
+    trigger: Runs aic navigate --query "something unrelated"
+    outcome: |
+      No match found.
+      All available business module names listed.
+      Helpful refinement suggestion printed.
+      Exit 0 — not an error.
+
+  - actor: Developer
+    trigger: Runs aic navigate --query "payment flow" with --file
+    outcome: |
+      Context written to .aic/context/payment-flow.txt
+      File path printed to terminal.
+
+  - actor: Autonomous AI agent (future v2)
+    trigger: Reads NAVIGATION.intent from project root directly
+    outcome: |
+      Follows step by step navigation instructions.
+      Self-navigates without running aic navigate command.
+      Used when AIC is not installed in the environment.
+
+failure-modes:
+  - scenario: AIC not initialised
+    response: Exit code 1 — suggest aic init
+
+  - scenario: No component or language matched
+    response: Exit code 0 — list available components, suggest refinement
+
+  - scenario: Clipboard copy fails
+    response: Fall back to terminal output, print warning
+
+  - scenario: File write fails
+    response: Fall back to terminal output, print warning
+
+implementation-note: |
+  This command contains zero LLM calls.
+  All phases are fully deterministic.
+  Phase 1: query parsing
+  Phase 2: file traversal
+  Phase 3: context assembly
+  Phase 4: output
+
+  v1 manual note:
+  Developer runs aic navigate, copies output, pastes into AI chat.
+  MCP server wrapping this command is planned for v2.

@@ -1,0 +1,136 @@
+id: AIC-ASK-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-ASK-001
+  language: aic-python-guidelines
+
+component: AskCommand
+file: python/ask/AskCommand/ask_command.py
+
+implementation:
+  - id: AIC-ASK-001-PY-I1
+    intent: |
+      Entry point is a Click command named ask().
+      Accepts:
+        --query: str      ← required, the question or fix request
+        --fix: bool       ← optional, applies code changes
+        --language: str   ← optional, scopes to one language
+      No positional arguments.
+
+  - id: AIC-ASK-001-PY-I2
+    intent: |
+      Phase 1 — Scope detection (deterministic).
+      Discover all components from /business folder.
+      Discover all languages from root folder.
+      Match component names against query string.
+      Match language names against query string.
+      Build ScopeResult:
+        components: list of matched component names
+        language: matched language or None
+        is_project_level: True if no component matched
+
+  - id: AIC-ASK-001-PY-I3
+    intent: |
+      Phase 2 — Context assembly (deterministic).
+      For each matched component:
+        Read project.intent
+        Read business/<Component>/module.intent
+        Read <language>/<language>.intent if language matched
+        Read all .intent files in <language>/<Component>/
+        Read all code files in <language>/<Component>/
+          (code files only in fix mode or when explicitly needed)
+      For project level:
+        Read project.intent
+        Read all module.intent files in /business/
+        No code files
+      Assemble into structured prompt context string.
+
+  - id: AIC-ASK-001-PY-I4
+    intent: |
+      Phase 3 — Prompt building (deterministic).
+      Question mode prompt structure:
+        Section 1: assembled intent context
+        Section 2: code files if component scope
+        Section 3: the query
+        Section 4: instruction — answer clearly and concisely
+
+      Fix mode prompt structure:
+        Section 1: assembled intent context
+        Section 2: existing code files with file paths as headers
+        Section 3: the fix request
+        Section 4: instruction —
+          "Return fixed code for each file you modify.
+           Format each file as:
+           FILE: <relative/path/to/file>
+           <complete fixed file content>
+           END_FILE
+           Only include files you actually changed."
+
+  - id: AIC-ASK-001-PY-I5
+    intent: |
+      Phase 4 — AI call (LLM).
+      Send prompt to configured AI provider.
+      Receive response string.
+      Question mode: print response directly to terminal.
+      Fix mode: parse response into file blocks then write.
+
+  - id: AIC-ASK-001-PY-I6
+    intent: |
+      Fix mode response parsing (deterministic).
+      Parse AI response looking for FILE: markers.
+      Pattern:
+        FILE: python/UserService/user_service.py
+        <code content>
+        END_FILE
+      Extract list of (file_path, code_content) tuples.
+      If no FILE markers found — print raw response as fallback.
+      Warn developer to apply manually.
+
+  - id: AIC-ASK-001-PY-I7
+    intent: |
+      Fix mode file writing (deterministic).
+      For each (file_path, code_content) tuple:
+        Resolve full path from project root.
+        Write code content to file.
+        Print: "Fixed: <file_path>"
+      If write fails print error but continue with other files.
+
+  - id: AIC-ASK-001-PY-I8
+    intent: |
+      Fix mode auto-sync (deterministic + LLM via sync).
+      After writing each fixed file:
+        Detect which component and language from file path.
+        Call run_sync(component_name, language) internally.
+        Sync generates intent update suggestions automatically.
+        Print: "Sync triggered for <component> — review suggestions"
+      Developer then runs aic sync --approve to apply intent updates.
+
+  - id: AIC-ASK-001-PY-I9
+    intent: |
+      Multi-language fix guard.
+      If component exists in multiple language folders
+      and --language flag not provided:
+        List which languages the component exists in.
+        Exit with message asking developer to specify --language.
+        Fix cannot be applied to all languages simultaneously.
+
+  - id: AIC-ASK-001-PY-I10
+    intent: |
+      Print summary after fix mode completes:
+        "Files modified:"
+          list each written file path
+        "Sync status:"
+          list each component where sync was triggered
+        "Next steps:"
+          aic sync <Component> --language <language> --approve
+          aic status
+
+error-handling:
+  - NotInitialisedError         → exit code 1
+  - GitNotInitialisedError      → exit code 1
+  - ProviderNotConfiguredError  → exit code 1
+  - ProviderCallError           → exit code 2, no files written
+  - MultiLanguageFixError       → exit code 1, specify --language
+  - NoMatchError                → exit code 0, list components
+  - FileWriteError              → warn and continue, do not abort

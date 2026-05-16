@@ -1,0 +1,108 @@
+id: AIC-SYNC-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic sync
+command: aic sync <ComponentName> --language <language>
+description: >
+  Syncs code changes back to component.intent.
+  Code is the source of truth after a manual fix.
+  AI compares current code against current intent,
+  identifies gaps, and suggests intent updates.
+  Developer approves before any changes are written.
+
+behaviors:
+  - id: AIC-SYNC-001-B1
+    intent: |
+      Validate AIC is initialised and git is present.
+      Validate component exists in specified language folder.
+      Validate a lockfile exists — if not suggest aic compile first.
+
+  - id: AIC-SYNC-001-B2
+    intent: |
+      Read current component.intent and current generated code file.
+      Send both to configured AI provider with this instruction:
+        "Compare this code against this intent file.
+         Identify anything in the code that is not captured in the intent.
+         Suggest updated or new intent sections only for what changed.
+         Return only the YAML sections that need updating."
+      This is the only LLM call in the entire command.
+
+  - id: AIC-SYNC-001-B3
+    intent: |
+      Print the AI suggested intent changes clearly to terminal.
+      Show side by side where possible:
+        OLD intent section
+        SUGGESTED intent section
+      Do not write anything to component.intent yet.
+      Ask developer to approve or reject.
+
+  - id: AIC-SYNC-001-B4
+    intent: |
+      If --approve flag present apply suggested changes to component.intent.
+      Merge suggested YAML sections into existing component.intent.
+      Do not overwrite the entire file — only update changed sections.
+      Update lockfile after successful write.
+      Print success message confirming what was updated.
+
+  - id: AIC-SYNC-001-B5
+    intent: |
+      If --reject flag present discard suggestions.
+      component.intent unchanged.
+      Inform developer no changes were made.
+
+  - id: AIC-SYNC-001-B6
+    intent: |
+      Without --approve or --reject flag:
+      Generate and show suggestions only.
+      Print approval and rejection commands below suggestions.
+      Do not prompt interactively — just show the commands.
+
+  - id: AIC-SYNC-001-B7
+    intent: |
+      After successful --approve update lockfile:
+        New intent hash from updated component.intent
+        New code hash from current code file
+        Sync timestamp
+      This clears DRIFT state in aic status.
+
+journeys:
+  - actor: Developer
+    trigger: Made hotfix in code, runs aic sync
+    outcome: |
+      AI compares code vs intent.
+      Suggested intent updates shown.
+      Developer runs with --approve.
+      component.intent updated with only the changed sections.
+      aic status shows IN SYNC.
+
+  - actor: Developer
+    trigger: Runs aic sync --approve without running sync first
+    outcome: |
+      No suggestions exist yet.
+      Clear message — run sync first without --approve to generate suggestions.
+
+  - actor: Developer
+    trigger: Code perfectly matches intent
+    outcome: |
+      AI reports no gaps found.
+      No suggestions generated.
+      component.intent untouched.
+      Clean message printed.
+
+failure-modes:
+  - scenario: No lockfile
+    response: Exit code 1 — suggest aic compile first
+
+  - scenario: AI provider not configured
+    response: Exit code 1 — suggest filling aic.config.json
+
+  - scenario: AI provider call fails
+    response: Exit code 2 — no changes made
+
+  - scenario: component.intent write fails
+    response: Exit code 2 — suggestions preserved, show path error
+
+  - scenario: No suggestions file when --approve run
+    response: Exit code 1 — run sync first to generate suggestions
