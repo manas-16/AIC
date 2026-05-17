@@ -1,0 +1,88 @@
+id: AIC-TRANSPILE-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-TRANSPILE-001
+  language: aic-python-guidelines
+
+component: TranspileCommand
+file: python/transpile/TranspileCommand/transpile_command.py
+
+implementation:
+  - id: AIC-TRANSPILE-001-PY-I1
+    covers: AIC-TRANSPILE-001-B1
+    intent: |
+      Entry point is a Click command named transpile().
+      Accepts:
+        --target: str      ← required, language or language@version
+        --force: bool      ← optional, overwrite existing components
+        --component: str   ← optional, single component name to transpile
+      Parses target using CompileTarget.parse() same as compile command.
+      Validates git, init, provider config before discovering components.
+
+  - id: AIC-TRANSPILE-001-PY-I2
+    covers: AIC-TRANSPILE-001-B2
+    intent: |
+      Component discovery via pathlib scan of /business folder.
+      For each component subfolder in /business:
+        Check if target_language/component_name/ folder exists.
+        If exists and not --force — add to skipped list.
+        If exists and --force — add to compile list.
+        If not exists — create folder and scaffold component.intent
+          using component.intent.template with module_id from module.intent.
+          Then add to compile list.
+      If --component flag set filter to that component only.
+
+  - id: AIC-TRANSPILE-001-PY-I3
+    covers: AIC-TRANSPILE-001-B3
+    intent: |
+      For each component in compile list call run_compile() directly.
+      Pass component_name, target string, force=True for --force mode.
+      Wrap each call in try/except to catch failures without aborting.
+      Capture SystemExit from run_compile — treat exit code 1/2 as failure.
+      On success add to compiled list.
+      On failure add to failed list with error message.
+
+  - id: AIC-TRANSPILE-001-PY-I4
+    covers: AIC-TRANSPILE-001-B4
+    intent: |
+      Print progress after each component:
+        print_success for compiled
+        print_warning for skipped
+        print_error for failed — but continue
+      Use a simple counter shown before each component:
+        [1/14] Compiling UserService...
+        [2/14] Compiling PaymentService...
+
+  - id: AIC-TRANSPILE-001-PY-I5
+    covers: AIC-TRANSPILE-001-B5
+    intent: |
+      --force flag passed through to run_compile for each component.
+      Also controls whether existing component folders are skipped.
+
+  - id: AIC-TRANSPILE-001-PY-I6
+    covers: AIC-TRANSPILE-001-B6
+    intent: |
+      --component flag filters component list to single named component.
+      If component name not found in /business print error and exit 1.
+
+  - id: AIC-TRANSPILE-001-PY-I7
+    covers: AIC-TRANSPILE-001-B7
+    intent: |
+      Print final summary table after all components processed:
+        Total:    N
+        Compiled: X (green)
+        Skipped:  Y (yellow)
+        Failed:   Z (red)
+      If failed > 0 list each failed component name and suggest:
+        aic compile <ComponentName> --target <language> for details.
+      Exit code 0 if failed == 0.
+      Exit code 1 if any failed.
+
+error-handling:
+  - GitNotInitialisedError      → exit code 1
+  - NotInitialisedError         → exit code 1
+  - ProviderNotConfiguredError  → exit code 1
+  - NoComponentsError           → exit code 0, friendly message
+  - ComponentNotFoundError      → exit code 1, show available components
+  - Individual compile failure  → log and continue, do not abort

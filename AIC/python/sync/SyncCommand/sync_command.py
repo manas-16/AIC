@@ -31,7 +31,6 @@ import click
 import yaml
 
 from core.exceptions import AICError, GitNotInitialisedError
-from core.delta_engine import DeltaEngine
 from core.lockfile_manager import LockfileManager
 from models.intent import CompileTarget
 from models.config import AICConfig
@@ -144,12 +143,35 @@ def _build_sync_prompt(component_intent: dict, current_code: str) -> str:
     """
     Build prompt asking AI to compare code against intent
     and suggest only the sections that need updating.
+    Includes explicit format example so AI follows exact structure.
     """
     intent_yaml = yaml.dump(
         component_intent,
         default_flow_style=False,
         allow_unicode=True
     )
+
+    # Extract existing implementation entries as format examples
+    existing_impl = component_intent.get("implementation", [])
+    format_example = ""
+    if existing_impl and isinstance(existing_impl, list):
+        # Show the first real implementation entry as the format template
+        for entry in existing_impl:
+            if isinstance(entry, dict) and entry.get("intent", "").strip().lower() != "skip":
+                example = yaml.dump(
+                    {"implementation": [entry]},
+                    default_flow_style=False,
+                    allow_unicode=True
+                )
+                format_example = f"""
+EXACT FORMAT TO FOLLOW FOR IMPLEMENTATION ENTRIES:
+{example}
+Each entry MUST have:
+  - id: (string, e.g. {entry.get('id', 'USR-001-PY-I1')})
+  - covers: (the business behavior ID this implements, e.g. USR-001-B1)
+  - intent: | (multi-line string describing the implementation)
+"""
+                break
 
     border = "=" * 60
 
@@ -172,12 +194,16 @@ Identify what is in the code that is:
   - Missing from the intent
   - Different from what the intent describes
   - A new behavior not captured in the intent
-
-Return ONLY the YAML sections that need to be added or updated.
-Use the exact same format, indentation and style as the intent file above.
-Do not return the entire intent file — only what changed.
-Do not include explanations or markdown.
-Return only valid YAML.
+{format_example}
+STRICT FORMAT RULES — follow these exactly:
+1. Return ONLY valid YAML — no markdown, no code fences, no explanations
+2. Match the exact indentation and structure of the existing intent file
+3. For new implementation entries use the format example above exactly
+4. Use the | character for multi-line intent values
+5. Each implementation entry must have: id, covers, and intent fields
+6. Do not add plain text or prose — only YAML
+7. Do not return the entire intent file — only the sections that changed
+8. covers field must reference the business behavior ID (e.g. USR-001-B1)
 
 If the code and intent are already in sync return exactly:
 NO_CHANGES_NEEDED"""
@@ -289,7 +315,9 @@ def _apply_suggestions(
             raise IntentWriteError(str(component_intent_path))
 
     # Update lockfile
-    new_intent_hash = DeltaEngine.compute_hash(component_intent)
+    new_intent_hash = _hash_content(
+        yaml.dump(component_intent, sort_keys=True)
+    )
     current_code = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
     new_code_hash = _hash_content(current_code)
 

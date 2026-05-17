@@ -1,0 +1,68 @@
+id: AIC-AUDIT-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-AUDIT-001
+  language: aic-python-guidelines
+
+component: AuditCommand
+file: python/audit/AuditCommand/audit_command.py
+
+implementation:
+  - id: AIC-AUDIT-001-PY-I1
+    covers: AIC-AUDIT-001-B1
+    intent: |
+      Entry point is a Click command named audit().
+      Accepts one positional argument: file_path (str, required).
+      Resolves full path using pathlib.Path relative to project root.
+      Extracts language from first path segment matching a language folder.
+      Extracts component from second path segment matching a component folder.
+      Falls back to partial match if full resolution fails.
+
+  - id: AIC-AUDIT-001-PY-I2
+    covers: AIC-AUDIT-001-B2
+    intent: |
+      Reads all intent files in order:
+        project.intent from project root
+        language.intent from language folder
+        module.intent from business/<component>/
+        component.intent from <language>/<component>/
+      Each file read as raw text via _read_safe.
+      Code file read as raw text.
+      Missing intent files noted in output but not fatal.
+
+  - id: AIC-AUDIT-001-PY-I3
+    covers: AIC-AUDIT-001-B3
+    intent: |
+      Builds a strict audit prompt with these sections:
+        Section 1: all intent files concatenated with clear labels
+        Section 2: the code file with its path as label
+        Section 3: strict instructions — judge only against declared intents
+      Instructions must explicitly forbid AI from adding suggestions
+      or commenting on anything not covered by an intent rule.
+
+  - id: AIC-AUDIT-001-PY-I4
+    covers: AIC-AUDIT-001-B4
+    intent: |
+      Parses AI response line by line looking for PASS/FAIL/SKIP markers.
+      Prints structured table using colorama:
+        PASS lines in green
+        FAIL lines in red
+        SKIP lines in yellow
+      Prints summary line at end.
+      Exits with code 1 if any FAIL found, 0 if all PASS or SKIP.
+
+  - id: AIC-AUDIT-001-PY-I5
+    covers: AIC-AUDIT-001-B5
+    intent: |
+      No post-processing of AI response beyond PASS/FAIL/SKIP parsing.
+      Raw AI lines that do not match the pattern are printed as-is
+      in dim color so developer can read them but they are visually
+      de-emphasised from the structured verdict lines.
+
+error-handling:
+  - FileNotFoundError          → exit code 1, show exact path
+  - ComponentResolutionError   → exit code 1, show available components
+  - NoIntentFilesError         → exit code 1, suggest aic init
+  - ProviderNotConfiguredError → exit code 1
+  - ProviderCallError          → exit code 2

@@ -1,0 +1,116 @@
+id: AIC-TRANSPILE-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic transpile
+command: aic transpile --target <language[@version]>
+description: >
+  Compiles every component in the project to a new target language.
+  Used for full project migrations — Android to Flutter, Java 8 to Java 21,
+  Python 2 to Python 3, or adding an entirely new language target.
+  Walks every module in /business, finds or creates corresponding
+  component folders in the new language, and compiles each one.
+  Does not touch existing language folders — additive only.
+
+behaviors:
+  - id: AIC-TRANSPILE-001-B1
+    intent: |
+      Validate AIC is initialised, git is present, and AI provider configured.
+      Validate target language and optional version are valid strings.
+      Discover all components by scanning /business folder.
+      If no components found exit with friendly message.
+
+  - id: AIC-TRANSPILE-001-B2
+    intent: |
+      For each component in /business:
+        Check if component folder already exists in target language folder.
+        If exists and --force not set — skip with warning, do not overwrite.
+        If exists and --force set — overwrite.
+        If does not exist — create component folder and scaffold intent file.
+
+  - id: AIC-TRANSPILE-001-B3
+    intent: |
+      For each component that needs compilation:
+        Run the full compile flow — same as aic compile.
+        Intent sync step runs first (component.intent vs module.intent).
+        Delta check runs (new component = full generation).
+        AI generates code for target language.
+        Code written to target language folder.
+        Lockfile written per component.
+
+  - id: AIC-TRANSPILE-001-B4
+    intent: |
+      Print progress per component:
+        ✓ ComponentName — compiled successfully
+        ⚠ ComponentName — skipped (already exists, use --force to overwrite)
+        ✗ ComponentName — failed (show error, continue with next)
+      Failures do not abort transpile — continue with remaining components.
+      Summary at end shows total compiled, skipped, failed.
+
+  - id: AIC-TRANSPILE-001-B5
+    intent: |
+      Support --force flag to overwrite existing components in target language.
+      Without --force existing components in target language are skipped.
+      With --force all components are recompiled regardless.
+
+  - id: AIC-TRANSPILE-001-B6
+    intent: |
+      Support --component flag to transpile a single named component only.
+      Useful for testing transpile on one component before full project run.
+      aic transpile --target flutter --component UserService
+
+  - id: AIC-TRANSPILE-001-B7
+    intent: |
+      After all components processed print final summary:
+        Total components found: N
+        Successfully compiled: X
+        Skipped (already exist): Y
+        Failed: Z
+      If any failed — list their names and suggest running individually
+      with aic compile <Component> --target <language> for details.
+
+journeys:
+  - actor: Developer
+    trigger: Migrating entire Android project to Flutter
+    outcome: |
+      Every component compiled to Flutter.
+      New /flutter folder created with all components.
+      Android folder untouched.
+      Summary shows X compiled, Y skipped, Z failed.
+
+  - actor: Developer
+    trigger: Adding iOS target to existing Android + Python project
+    outcome: |
+      Every component compiled to Swift.
+      New /swift folder created alongside /android and /python.
+      No existing folders touched.
+
+  - actor: Developer
+    trigger: Runs transpile with some components already in target language
+    outcome: |
+      Existing components skipped with warning.
+      New components compiled.
+      --force flag reruns all including existing.
+
+  - actor: Developer
+    trigger: Runs transpile --component UserService --target flutter
+    outcome: |
+      Only UserService compiled to Flutter.
+      Quick test before full project transpile.
+
+failure-modes:
+  - scenario: AIC not initialised
+    response: Exit code 1 — suggest aic init
+
+  - scenario: No components in /business
+    response: Exit code 0 — friendly message, suggest aic create
+
+  - scenario: AI provider not configured
+    response: Exit code 1 — suggest filling aic.config.json
+
+  - scenario: Individual component compile fails
+    response: Log failure, continue with next component, list failures in summary
+
+  - scenario: All components fail
+    response: Exit code 1 — suggest running aic compile individually for details

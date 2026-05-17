@@ -229,5 +229,47 @@ def ask(query: str, fix: bool, language: str):
     """
     run_ask(query, fix, language)
 
+from audit.AuditCommand.audit_command import run_audit
+
+@cli.command()
+@click.argument("file_path")
+def audit(file_path: str):
+    """
+    Strictly audit a code file against its declared intent files.
+
+    Checks code compliance against project, language, business,
+    and component intent only. No extra suggestions. No opinions.
+    Pass or fail per declared intent rule. Nothing else.
+
+    Exit code 0 if all pass. Exit code 1 if any fail.
+
+    Examples:
+      aic audit python/UserService/user_service.py
+      aic audit force-app/main/default/classes/AccountService.cls
+    """
+    run_audit(file_path)
+
+
+from transpile.TranspileCommand.transpile_command import run_transpile
+
+@cli.command()
+@click.option("--target", required=True, help="Target language e.g. flutter or java@21")
+@click.option("--force", is_flag=True, default=False, help="Overwrite existing components")
+@click.option("--component", default=None, help="Transpile single component only")
+def transpile(target: str, force: bool, component: str):
+    """
+    Compile every component to a new target language.
+
+    Used for full project migrations or adding a new language target.
+    Existing components in the target language are skipped unless --force.
+
+    Examples:
+      aic transpile --target flutter
+      aic transpile --target java@21
+      aic transpile --target swift --force
+      aic transpile --target flutter --component UserService
+    """
+    run_transpile(target, force, component)
+
 if __name__ == "__main__":
     cli()

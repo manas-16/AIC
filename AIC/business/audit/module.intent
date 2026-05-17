@@ -1,0 +1,92 @@
+id: AIC-AUDIT-001
+type: module
+owner: business
+extends: project.intent
+
+module: aic audit
+command: aic audit <code-file-path>
+description: >
+  Strictly judges a code file against all relevant intent files.
+  No extra suggestions. No style advice. No best practices.
+  Only checks whether the code complies with declared intent.
+  Pass or fail per intent rule. Nothing else.
+
+behaviors:
+  - id: AIC-AUDIT-001-B1
+    intent: |
+      Accept a code file path relative to project root.
+      Resolve the component name and language from the file path
+      by matching against known language folders and component folders.
+      If file path cannot be resolved to a component — exit with
+      clear message showing how to structure the path.
+
+  - id: AIC-AUDIT-001-B2
+    intent: |
+      Assemble all intent files relevant to this code file:
+        project.intent      — org-wide rules
+        language.intent     — language guidelines
+        module.intent       — business behaviors
+        component.intent    — implementation spec
+      Read the code file as raw text.
+      Pass all of the above to AI.
+
+  - id: AIC-AUDIT-001-B3
+    intent: |
+      The AI must judge the code ONLY against the declared intents.
+      The AI must not suggest improvements beyond what is declared.
+      The AI must not comment on style, performance, or patterns
+      that are not explicitly declared in any intent file.
+      The AI must produce a structured verdict per intent rule.
+
+  - id: AIC-AUDIT-001-B4
+    intent: |
+      Output format is a structured report:
+        PASS   — code complies with this intent rule
+        FAIL   — code violates this intent rule
+        SKIP   — intent rule marked skip, not applicable
+      Each line shows: status | intent ID | one line reason
+      Summary at bottom: X passed, Y failed, Z skipped
+      Exit code 0 if all pass. Exit code 1 if any fail.
+
+  - id: AIC-AUDIT-001-B5
+    intent: |
+      Do not show AI suggestions, recommendations, or opinions.
+      If the intent says nothing about something in the code
+      that is not a failure — only declared intents are checked.
+      Silence on topics not covered by intent is correct behavior.
+
+journeys:
+  - actor: Developer
+    trigger: Runs aic audit before raising PR
+    outcome: |
+      Structured pass/fail report per intent rule.
+      Clear list of what failed and which intent it violates.
+      Exit code 1 if any failures — PR should not be raised.
+
+  - actor: Tech Lead
+    trigger: Runs aic audit on a submitted PR file
+    outcome: |
+      Objective report showing exactly which declared rules pass or fail.
+      No subjective feedback — only intent compliance.
+
+  - actor: Developer
+    trigger: Runs aic audit on a file with no component.intent
+    outcome: |
+      Audit runs with project.intent and language.intent only.
+      No component-level check — clearly stated in output.
+
+failure-modes:
+  - scenario: File path not found
+    response: Exit code 1 — show exact path that was not found
+
+  - scenario: Cannot resolve component from file path
+    response: Exit code 1 — show available components, suggest correct path
+
+  - scenario: No intent files found
+    response: Exit code 1 — suggest aic init and aic create first
+
+  - scenario: AI provider not configured
+    response: Exit code 1 — suggest filling aic.config.json
+
+  - scenario: AI provider call fails
+    response: Exit code 2 — no report generated
