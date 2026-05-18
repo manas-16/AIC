@@ -86,6 +86,26 @@ If you run any of these experiments, share your results. Positive results streng
 
 ---
 
+## Documentation
+
+📚 **[Complete CLI Commands Reference](./COMMANDS.md)** — Full guide to all AIC commands, options, usage examples, and workflows
+
+Available commands:
+- `aic init` — Initialise AIC in current directory
+- `aic create` — Scaffold new components
+- `aic compile` — Compile intent to code via AI (with delta-based compilation)
+- `aic sync` — Sync manual code changes back to intent
+- `aic status` — Check sync state of all components
+- `aic validate` — Validate .intent files
+- `aic audit` — Audit code against declared intent
+- `aic ask` — Ask AI questions or request fixes
+- `aic navigate` — Assemble scoped context for AI chat
+- `aic transpile` — Compile all components to new language
+
+**Special note on delta compilation:** When changes are made at higher intent levels (module.intent or language.intent), use `aic compile --force` to regenerate code, then `aic sync --approve` to keep component.intent in sync across all levels.
+
+---
+
 ## Roadmap
 
 - [ ] `.intent` file format specification
