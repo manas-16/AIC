@@ -4,7 +4,7 @@
 
 ## What is this?
 
-AIC is the reference implementation of **Intent-Oriented Architecture (IOA)** — a methodology where human intent at each organisational level is explicitly declared, version-controlled, and treated as the source of truth for all downstream artefacts including code, documentation, and API specifications.
+AIC is the reference implementation of **Intent-Oriented Programming (IOP)** — a methodology where human intent at each organisational level is explicitly declared, version-controlled, and treated as the source of truth for all downstream artefacts including code, documentation, and API specifications.
 
 Instead of asking AI to reverse-engineer understanding from code, you give it a map.
 Repository ←→ .intent files ←→ AI
@@ -64,9 +64,9 @@ Four levels of structured intent, each owned by the right role:
 
 🚧 **Working prototype in development.**
 
-The full design document covering IOA methodology, AIC implementation, file structure, inheritance model, commands, use cases, and proposed proof-of-concept experiments is available here:
+The full design document covering IOP methodology, AIC implementation, file structure, inheritance model, commands, use cases, and proposed proof-of-concept experiments is available here:
 
-📄 [IOA & AIC Complete Design Document](./IOA_and_AIC_Complete_Design_Document.docx)
+📄 [IOP & AIC Complete Design Document](./IOP_and_AIC_Complete_Design_Document.docx)
 
 📝 [Introducing the concept — Medium Article](https://medium.com/@manaskhare07/your-ai-coding-tool-has-no-idea-what-your-codebase-is-supposed-to-do-5f4a3cd0e5a8)
 
