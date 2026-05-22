@@ -114,7 +114,7 @@ Available commands:
 - [✓] `aic status` — sync state tracking
 - [✓] `aic sync` — bidirectional sync
 - [✓] Multi-target compilation
-- [✓] VS Code extension
+- [] VS Code extension
 
 ---
 
