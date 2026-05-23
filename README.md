@@ -108,13 +108,13 @@ Available commands:
 
 ## Roadmap
 
-- [ ] `.intent` file format specification
-- [ ] `aic init` — project initialisation
-- [ ] `aic compile` — single component, single target
-- [ ] `aic status` — sync state tracking
-- [ ] `aic sync` — bidirectional sync
-- [ ] Multi-target compilation
-- [ ] VS Code extension
+- [✓] `.intent` file format specification
+- [✓] `aic init` — project initialisation
+- [✓] `aic compile` — single component, single target
+- [✓] `aic status` — sync state tracking
+- [✓] `aic sync` — bidirectional sync
+- [✓] Multi-target compilation
+- [] VS Code extension
 
 ---
 
