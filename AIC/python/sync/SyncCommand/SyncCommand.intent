@@ -10,6 +10,7 @@ file: python/sync/SyncCommand/sync_command.py
 
 implementation:
   - id: AIC-SYNC-001-PY-I1
+    covers: AIC-SYNC-001-B1
     intent: |
       Entry point is a Click command named sync().
       Accepts:
@@ -21,6 +22,7 @@ implementation:
       No flags — generate suggestions and show them.
 
   - id: AIC-SYNC-001-PY-I2
+    covers: AIC-SYNC-001-B2
     intent: |
       Phase 1 — Validation (deterministic).
       Check git, AIC init, component exists, lockfile exists.
@@ -29,6 +31,7 @@ implementation:
       Raise clear errors if either file missing.
 
   - id: AIC-SYNC-001-PY-I3
+    covers: AIC-SYNC-001-B3
     intent: |
       Phase 2 — AI comparison (LLM).
       Build prompt with two sections:
@@ -43,8 +46,9 @@ implementation:
          If code and intent are in sync return: NO_CHANGES_NEEDED"
       Call configured AI provider.
       If response is NO_CHANGES_NEEDED print clean message and exit.
-
+    
   - id: AIC-SYNC-001-PY-I4
+    covers: AIC-SYNC-001-B4
     intent: |
       Phase 3 — Display suggestions (deterministic).
       Parse AI response as YAML.
@@ -53,8 +57,9 @@ implementation:
         Suggested update shown in green
       Save suggestions to .aic/sync-proposals/<Component>-<language>.proposal
       Print approval and rejection commands below.
-
+    
   - id: AIC-SYNC-001-PY-I5
+    covers: AIC-SYNC-001-B5
     intent: |
       --approve flow (deterministic):
         Read .aic/sync-proposals/<Component>-<language>.proposal
@@ -68,6 +73,7 @@ implementation:
         Print success.
 
   - id: AIC-SYNC-001-PY-I6
+    covers: AIC-SYNC-001-B6
     intent: |
       --reject flow (deterministic):
         Delete .aic/sync-proposals/<Component>-<language>.proposal if exists.
@@ -75,6 +81,7 @@ implementation:
         Suggest aic compile --force if developer wants to reset code to intent.
 
   - id: AIC-SYNC-001-PY-I7
+    covers: AIC-SYNC-001-B7
     intent: |
       Sync prompt structure:
         "CURRENT COMPONENT INTENT:\n<yaml>\n\n

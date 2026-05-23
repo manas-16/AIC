@@ -10,6 +10,7 @@ file: python/create/CreateCommand/create_command.py
 
 implementation:
   - id: AIC-CREATE-001-PY-I1
+    covers: AIC-CREATE-001-B1
     intent: |
       Entry point is a Click command function named create().
       Accepts two arguments:
@@ -18,6 +19,7 @@ implementation:
       Uses terminal utility for all output.
 
   - id: AIC-CREATE-001-PY-I2
+    covers: AIC-CREATE-001-B1, AIC-CREATE-001-B2, AIC-CREATE-001-B3, AIC-CREATE-001-B4
     intent: |
       Phase 1 — Validation.
       Run all checks before creating any files:
@@ -29,12 +31,14 @@ implementation:
       No files created if any check fails.
 
   - id: AIC-CREATE-001-PY-I3
+    covers: AIC-CREATE-001-B3
     intent: |
       PascalCase validation uses regex: ^[A-Z][a-zA-Z0-9]+$
       Rejects: userService, user_service, UserService!, user service
       Accepts: UserService, PaymentService, AuthRepository
 
   - id: AIC-CREATE-001-PY-I4
+    covers: AIC-CREATE-001-B5
     intent: |
       Phase 2 — Module intent resolution.
       Check if /business/<ComponentName>/module.intent exists.
@@ -48,6 +52,7 @@ implementation:
               store new module_id for later use
 
   - id: AIC-CREATE-001-PY-I5
+    covers: AIC-CREATE-001-B4
     intent: |
       Phase 3 — Language intent resolution.
       Read /<language>/language.intent or <language>.intent
@@ -56,12 +61,14 @@ implementation:
       Print warning if language.intent is incomplete.
 
   - id: AIC-CREATE-001-PY-I6
+    covers: AIC-CREATE-001-B6
     intent: |
       Phase 4 — Component folder creation.
       Create /<language>/<ComponentName>/ using pathlib.Path
       Raise ComponentAlreadyExistsError if folder exists.
 
   - id: AIC-CREATE-001-PY-I7
+    covers: AIC-CREATE-001-B7
     intent: |
       Phase 5 — File generation.
       Generate component.intent from template.
@@ -74,6 +81,7 @@ implementation:
       Write to /<language>/<ComponentName>/ComponentName.intent
 
   - id: AIC-CREATE-001-PY-I8
+    covers: AIC-CREATE-001-B8
     intent: |
       Phase 6 — Code stub generation.
       Generate language appropriate empty stub.
@@ -85,6 +93,7 @@ implementation:
       Example: UserService → user_service.py
 
   - id: AIC-CREATE-001-PY-I9
+    covers: AIC-CREATE-001-B9
     intent: |
       Phase 7 — Output.
       Print success header with component name.

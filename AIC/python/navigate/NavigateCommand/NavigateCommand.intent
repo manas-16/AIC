@@ -10,6 +10,7 @@ file: python/navigate/NavigateCommand/navigate_command.py
 
 implementation:
   - id: AIC-NAV-001-PY-I1
+    covers: AIC-NAV-001-B1
     intent: |
       Entry point is a Click command named navigate().
       Accepts:
@@ -19,6 +20,7 @@ implementation:
       All output deterministic — zero LLM calls.
 
   - id: AIC-NAV-001-PY-I2
+    covers: AIC-NAV-001-B2
     intent: |
       Phase 1 — Query parsing (deterministic).
       Extract component name by matching query words against
@@ -31,6 +33,7 @@ implementation:
       and ask developer to clarify. Do not guess.
 
   - id: AIC-NAV-001-PY-I3
+    covers: AIC-NAV-001-B3
     intent: |
       Phase 2 — File traversal (deterministic).
       Always read project.intent first — always in scope.
@@ -40,8 +43,9 @@ implementation:
         <language>/<Component>/<Component>.intent.
       If component not matched — list business folder names only.
       Do not read sibling components — scope pollution prevention.
-
+    
   - id: AIC-NAV-001-PY-I4
+    covers: AIC-NAV-001-B4
     intent: |
       Phase 3 — Context assembly (deterministic).
       Concatenate all read files into one structured context block.
@@ -66,8 +70,9 @@ implementation:
       ─────────────────────────────────────────
       Paste this context into your AI before describing your task.
       ─────────────────────────────────────────
-
+    
   - id: AIC-NAV-001-PY-I5
+    covers: AIC-NAV-001-B5
     intent: |
       Phase 4 — Output (deterministic).
       Default: print assembled context to terminal.
@@ -78,6 +83,7 @@ implementation:
         Print file path after writing.
 
   - id: AIC-NAV-001-PY-I6
+    covers: AIC-NAV-001-B6
     intent: |
       If no component matched in query:
         Print list of available components from /business folder.
@@ -86,6 +92,7 @@ implementation:
         Exit 0 — not an error, developer needs to refine query.
 
   - id: AIC-NAV-001-PY-I7
+    covers: AIC-NAV-001-B7
     intent: |
       Always print a one-line summary before the context block:
         "Context assembled for: <matched components and language>"

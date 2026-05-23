@@ -11,15 +11,17 @@ description: >
   and returns the answer or applies the fix.
   Two modes: question mode and fix mode.
   Fix mode applies code changes then triggers sync automatically.
+  When no component is named in the query, RAG resolves the relevant
+  components autonomously from query semantics.
 
 behaviors:
   - id: AIC-ASK-001-B1
     intent: |
       Determine query scope from the query text.
       Scope rules:
-        Component mentioned by name → component scope
-        Multiple components mentioned → multi-component scope
-        No component mentioned → project scope
+        Component mentioned by name → component scope (skip RAG)
+        Multiple components mentioned by name → multi-component scope (skip RAG)
+        No component mentioned → RAG scope (resolve components from query semantics)
       Language detected from query or defaults to all languages.
       Scope determines which files get assembled as context.
 
@@ -35,11 +37,18 @@ behaviors:
       Multi-component scope:
         project.intent
         All mentioned components module.intent files
+        All mentioned components language.intent files
         All mentioned components code files
-      Project scope:
+      RAG scope:
+        project.intent
+        RAG-resolved module.intent files (see B8)
+        language.intent for resolved components
+        component.intent files co-located with resolved module.intents
+        Code files co-located with resolved component.intents
+      Project scope (RAG fallback — nothing found above threshold):
         project.intent
         All module.intent files in /business/
-        No code files — intent only for project level
+        No code files — intent only
 
   - id: AIC-ASK-001-B3
     intent: |
@@ -79,6 +88,22 @@ behaviors:
       For fix mode --language is required if component exists in
       multiple languages — cannot fix in all simultaneously.
 
+  - id: AIC-ASK-001-B8
+    intent: |
+      RAG-based component resolution (triggered when no component named in query).
+      Embed the query using configured embedding model.
+      Compare against pre-embedded corpus of all module.intent files stored in .aic/embeddings/.
+      Retrieve module.intent files above similarity threshold.
+      If one or more found above threshold:
+        Use matched module.intent IDs to locate component.intent files.
+        Component.intent lives in <language>/<ComponentName>/ — same folder, same name as code file.
+        Resolve language.intent from language folder of each matched component.
+        Assemble full context: project.intent + matched module.intents + resolved language.intents
+        + component.intents + code files.
+      If nothing found above threshold:
+        Fall back to project scope — project.intent and all module.intent files, no code files.
+      Embeddings corpus rebuilt automatically when module.intent files are created or modified.
+
 journeys:
   - actor: Developer
     trigger: Asks a question about UserService
@@ -110,6 +135,16 @@ journeys:
       All mentioned component intent and code files assembled.
       AI answers with full multi-component context.
 
+  - actor: Developer
+    trigger: Asks a question without naming any component
+    outcome: |
+      Query embedded and matched against module.intent corpus.
+      Relevant components resolved autonomously.
+      Full context assembled — project.intent, matched module.intents,
+      language.intents, component.intents, and code files.
+      AI answers with correctly scoped context.
+      Developer specified no files manually.
+
 failure-modes:
   - scenario: AI provider not configured
     response: Exit code 1 — suggest filling aic.config.json
@@ -125,3 +160,8 @@ failure-modes:
 
   - scenario: Fix response cannot be parsed into file blocks
     response: Print raw AI response — ask developer to apply manually
+
+  - scenario: RAG resolution finds no components above threshold
+    response: |
+      Fall back to project scope silently — no error.
+      Print note in output: "No specific component matched — answering from project context."

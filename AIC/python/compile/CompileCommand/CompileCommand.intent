@@ -10,6 +10,7 @@ file: python/compile/CompileCommand/compile_command.py
 
 implementation:
   - id: AIC-COMPILE-001-PY-I1
+    covers: AIC-COMPILE-001-B1
     intent: |
       Entry point is a Click command function named compile_component().
       Named compile_component not compile to avoid Python builtin conflict.
@@ -21,6 +22,7 @@ implementation:
       Parses target into language and optional version strings.
 
   - id: AIC-COMPILE-001-PY-I2
+    covers: AIC-COMPILE-001-B2
     intent: |
       Target parsing:
         --target python         → language=python, version=None
@@ -30,6 +32,7 @@ implementation:
       Validate language folder exists in project root.
 
   - id: AIC-COMPILE-001-PY-I3
+    covers: AIC-COMPILE-001-B1
     intent: |
       Config loading.
       Read .aic/aic.config.json using json.load.
@@ -39,6 +42,7 @@ implementation:
       Example: ${ANTHROPIC_API_KEY} → os.environ.get("ANTHROPIC_API_KEY")
 
   - id: AIC-COMPILE-001-PY-I4
+    covers: AIC-COMPILE-001-B2
     intent: |
       Phase 1 — Retrieval via IntentParser and InheritanceResolver.
       IntentParser reads each .intent file using yaml.safe_load.
@@ -50,6 +54,7 @@ implementation:
       Existing lockfile read via LockfileManager if present.
 
   - id: AIC-COMPILE-001-PY-I5
+    covers: AIC-COMPILE-001-B3
     intent: |
       Phase 2 — Delta computation via DeltaEngine.
       Hash current component intent using hashlib.sha256.
@@ -63,6 +68,7 @@ implementation:
         Build delta dict containing only changed sections.
 
   - id: AIC-COMPILE-001-PY-I6
+    covers: AIC-COMPILE-001-B4
     intent: |
       Phase 3 — Inference via provider adapter.
       Build prompt using PromptBuilder:
@@ -78,6 +84,7 @@ implementation:
       Handle provider errors explicitly — no bare except.
 
   - id: AIC-COMPILE-001-PY-I7
+    covers: AIC-COMPILE-001-B5
     intent: |
       Phase 4 — Write and lockfile update.
       Determine output file path from component.intent file field.
@@ -90,6 +97,7 @@ implementation:
       Lockfile is JSON format.
 
   - id: AIC-COMPILE-001-PY-I8
+    covers: AIC-COMPILE-001-B6
     intent: |
       --verify flag behavior.
       After writing output file, run VerificationEngine.
@@ -101,6 +109,7 @@ implementation:
       developer makes final call.
 
   - id: AIC-COMPILE-001-PY-I9
+    covers: AIC-COMPILE-001-B8
     intent: |
       Progress output using terminal utility.
       Show spinner or step indicator for each phase.

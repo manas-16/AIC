@@ -1,0 +1,134 @@
+id: AIC-STATUS-001-PY
+type: component
+owner: developer
+extends:
+  business: AIC-STATUS-001
+  language: aic-python-guidelines
+
+component: StatusCommand
+file: python/status/StatusCommand/status_command.py
+
+implementation:
+  - id: AIC-STATUS-001-PY-I1
+    covers: AIC-STATUS-001-B1
+    intent: |
+      Entry point is a Click command named status().
+      Accepts optional flags:
+        --component: str   ← optional, filter to one component
+        --language: str    ← optional, filter to one language
+      Displays sync state of every component across every language.
+      No positional arguments.
+
+  - id: AIC-STATUS-001-PY-I2
+    covers: AIC-STATUS-001-B2
+    intent: |
+      Phase 1 — Component discovery (deterministic).
+      Scan /business folder to find all component names.
+      Scan all language folders in project root.
+      Discover all (component, language) pairs where
+      <language>/<component>/ folder exists.
+      Apply optional --component and --language filters.
+      Return filtered list of pairs to check.
+
+  - id: AIC-STATUS-001-PY-I3
+    covers: AIC-STATUS-001-B3
+    intent: |
+      Phase 2 — State checking (deterministic).
+      For each (component, language) pair check four conditions in order:
+      1. NOT_COMPILED — component.intent file missing
+      2. STALE — intent changed since last compilation (hash mismatch)
+      3. DRIFT — generated code changed since last sync (code hash mismatch)
+      4. VIOLATION — overrides violate immutable rules from project.intent
+      Return state for each pair with resolution command.
+      Always return IN_SYNC if all checks pass.
+
+  - id: AIC-STATUS-001-PY-I4
+    covers: AIC-STATUS-001-B4
+    intent: |
+      NOT_COMPILED state logic (deterministic).
+      Check if <language>/<component>/<component>.intent exists.
+      If missing return NOT_COMPILED with resolution:
+        aic compile <component> --target <language>
+      This indicates component has never been compiled to this language.
+
+  - id: AIC-STATUS-001-PY-I5
+    covers: AIC-STATUS-001-B5
+    intent: |
+      STALE state logic (deterministic).
+      Read component.intent file and compute hash using hashlib.sha256.
+      Read lockfile if exists via LockfileManager.
+      If lockfile missing or intent hash != lockfile.intent_hash
+      return STALE with resolution:
+        aic compile <component> --target <language>
+      Indicates intent file was edited since last compilation.
+
+  - id: AIC-STATUS-001-PY-I6
+    covers: AIC-STATUS-001-B6
+    intent: |
+      DRIFT state logic (deterministic).
+      Read the generated code file path from intent "file" field.
+      Compute hash of generated code using hashlib.sha256.
+      Read stored code hash from lockfile.
+      If stored hash exists and current hash != stored hash
+      return DRIFT with resolution:
+        aic sync <component> --language <language>
+      Indicates code file was manually edited after compilation.
+
+  - id: AIC-STATUS-001-PY-I7
+    covers: AIC-STATUS-001-B7
+    intent: |
+      VIOLATION state logic (deterministic).
+      Read project.intent and extract immutable rules list.
+      Read component.intent and extract overrides dict.
+      For each override check if any override key matches
+      an immutable rule ID in project.intent.
+      If match found return VIOLATION with resolution:
+        aic audit <component> --language <language>
+      Indicates component overrode a rule marked immutable in project.
+
+  - id: AIC-STATUS-001-PY-I8
+    covers: AIC-STATUS-001-B8
+    intent: |
+      Phase 3 — Output formatting (deterministic).
+      Print table with components as rows and languages as columns.
+      Each cell shows state icon and label:
+        ✓ IN SYNC    — green
+        ⚠ STALE      — yellow
+        ✗ DRIFT      — red
+        ✗ VIOLATION  — red
+        ⚠ NOT COMPILED — yellow
+      Use colorama for terminal colors.
+      Cells with no component/language pair show — (dash).
+
+  - id: AIC-STATUS-001-PY-I9
+    covers: AIC-STATUS-001-B9
+    intent: |
+      Phase 4 — Resolution suggestions (deterministic).
+      After table print grouped resolution commands:
+        STALE section — list compile commands
+        DRIFT section — list sync commands
+        VIOLATIONS section — list audit commands
+      Only show sections with items in them.
+      No resolution suggestions if all in sync.
+
+  - id: AIC-STATUS-001-PY-I10
+    covers: AIC-STATUS-001-B10
+    intent: |
+      Phase 5 — Summary (deterministic).
+      Count components in each state.
+      Print summary line if not all in sync:
+        X in sync | Y stale | Z drift | W violations
+      Use colors:
+        in sync — green
+        stale — yellow
+        drift — red
+        violations — red
+      Print success message if all in sync:
+        "All components in sync — ready to raise PR"
+
+error-handling:
+  - NotInitialisedError         → exit code 1, suggest aic init
+  - GitNotInitialisedError      → exit code 1
+  - ComponentNotFoundError      → exit code 1, suggest aic create
+  - IntentParseError            → treat as NOT_COMPILED, warn
+  - FileNotFoundError           → treat as NOT_COMPILED, continue checking

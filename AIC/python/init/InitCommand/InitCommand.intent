@@ -10,6 +10,7 @@ file: aic/commands/init_command.py
 
 implementation:
   - id: AIC-INIT-001-PY-I1
+    covers: AIC-INIT-001-B1
     intent: |
       Entry point is a Typer command function named init().
       Decorated with @app.command().
@@ -17,6 +18,7 @@ implementation:
       Uses Rich console for all terminal output.
 
   - id: AIC-INIT-001-PY-I2
+    covers: AIC-INIT-001-B2
     intent: |
       Git check is performed first before any file operations.
       Use subprocess to run git rev-parse --git-dir.
@@ -24,6 +26,7 @@ implementation:
       Print clear Rich error panel and exit with code 1.
 
   - id: AIC-INIT-001-PY-I3
+    covers: AIC-INIT-001-B3
     intent: |
       Check for existing initialisation by looking for project.intent
       in current directory using pathlib.Path.
@@ -31,12 +34,14 @@ implementation:
       Print clear Rich error panel and exit with code 1.
 
   - id: AIC-INIT-001-PY-I4
+    covers: AIC-INIT-001-B4
     intent: |
       Derive project name from Path.cwd().name.
       Derive git remote URL by running git remote get-url origin.
       If no remote exists default to empty string — not an error.
 
   - id: AIC-INIT-001-PY-I5
+    covers: AIC-INIT-001-B5
     intent: |
       Create folder structure in this exact order:
         1. /business
@@ -50,6 +55,7 @@ implementation:
       with the specific path that failed.
 
   - id: AIC-INIT-001-PY-I6
+    covers: AIC-INIT-001-B6
     intent: |
       Generate project.intent from boilerplate template.
       Template lives at aic/templates/project.intent.template.
@@ -60,6 +66,7 @@ implementation:
       Write to project root as project.intent.
 
   - id: AIC-INIT-001-PY-I7
+    covers: AIC-INIT-001-B7
     intent: |
       Copy AIC intent library from aic/intent-lib/ installation path
       into .aic/intent-lib/ in the project.
@@ -68,12 +75,14 @@ implementation:
       and suggest reinstall via pip.
 
   - id: AIC-INIT-001-PY-I8
+    covers: AIC-INIT-001-B8
     intent: |
       Copy standards configs from aic/standards/ installation path
       into .aic/standards/ in the project.
       Set all copied files to read-only using os.chmod 444.
 
   - id: AIC-INIT-001-PY-I9
+    covers: AIC-INIT-001-B9
     intent: |
       Generate .aic/aic.config.json from template.
       Template lives at aic/templates/aic.config.template.json.
@@ -82,6 +91,7 @@ implementation:
       instructing developer what to fill in.
 
   - id: AIC-INIT-001-PY-I10
+    covers: AIC-INIT-001-B10
     intent: |
       Print success output using Rich Panel and Rich Tree.
       Tree shows exactly what was created — every file and folder.
